@@ -29,6 +29,9 @@ function broadcastBotEvent(eventType, data = {}) {
   }
 }
 
+// Алиас для обратной совместимости
+const publishEvent = broadcastPanelEvent;
+
 // SSE для веб-панели
 router.get('/', requireAuth, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -38,7 +41,6 @@ router.get('/', requireAuth, (req, res) => {
 
   panelClients.add(res);
 
-  // Heartbeat keep-alive каждые 20 сек
   const keepAlive = setInterval(() => {
     res.write(': keepalive\n\n');
   }, 20000);
@@ -68,8 +70,10 @@ router.get('/internal', internalAuth, (req, res) => {
   });
 });
 
-module.exports = {
-  router,
-  broadcastPanelEvent,
-  broadcastBotEvent,
-};
+// Экспортируем роутер как функцию-обработчик и прикрепляем утилиты
+router.router = router;
+router.broadcastPanelEvent = broadcastPanelEvent;
+router.broadcastBotEvent = broadcastBotEvent;
+router.publishEvent = publishEvent;
+
+module.exports = router;

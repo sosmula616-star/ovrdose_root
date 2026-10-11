@@ -32,9 +32,11 @@ const { loadUser, requireAuth } = require('./middleware/auth');
 function createWebServer(client, logger) {
   const app = express();
 
-  // Сохраняем ссылку на Discord клиент в app.locals
+  // Сохраняем ссылку на Discord клиент и SSE в app.locals
   app.locals.client = client;
   app.locals.logger = logger;
+  app.locals.broadcastEvent = eventsRoutes.broadcastPanelEvent;
+  app.locals.broadcastBotEvent = eventsRoutes.broadcastBotEvent;
 
   // 1. Helmet с настроенной Content Security Policy
   app.use(helmet({
