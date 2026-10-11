@@ -21,6 +21,7 @@ const AntinukeModule = require('./modules/antinuke');
 const BotManagerModule = require('./modules/botmanager');
 const SupervisorModule = require('./modules/supervisor');
 const BackupModule = require('./modules/backup');
+const ChannelsModule = require('./modules/channels');
 
 // Веб-панель
 const { createWebServer } = require('./web/server');
@@ -49,6 +50,7 @@ async function bootstrap() {
   const botManagerModule = new BotManagerModule(client, logger, loggingModule);
   const supervisorModule = new SupervisorModule(client, logger, loggingModule, botManagerModule);
   const backupModule = new BackupModule(client, logger, loggingModule);
+  const channelsModule = new ChannelsModule(client, logger, loggingModule);
 
   // Привязка модулей к клиенту для прямого доступа из команд и роутов веб-панели
   client.modules = {
@@ -59,12 +61,14 @@ async function bootstrap() {
     botmanager: botManagerModule,
     supervisor: supervisorModule,
     backup: backupModule,
+    channels: channelsModule,
   };
 
   // Запуск фоновых таймеров модулей
   syncModule.init();
   supervisorModule.init();
   backupModule.init();
+  channelsModule.init();
 
   // 4. Загрузка команд и событий бота
   logger.info('[Bot] Загрузка слэш-команд и обработчиков событий...');

@@ -27,6 +27,7 @@ const logChannelsRoutes = require('./routes/logchannels');
 const backupsRoutes = require('./routes/backups');
 const settingsRoutes = require('./routes/settings');
 const discordRoutes = require('./routes/discord');
+const channelsRoutes = require('./routes/channels');
 const { loadUser, requireAuth } = require('./middleware/auth');
 
 function createWebServer(client, logger) {
@@ -161,6 +162,7 @@ function createWebServer(client, logger) {
   app.use('/api/backups', backupsRoutes);
   app.use('/api/settings', settingsRoutes);
   app.use('/api/discord', discordRoutes);
+  app.use('/api/channels', channelsRoutes);
 
   // 9. Статические файлы фронтенда
   const publicDir = path.join(__dirname, 'public');

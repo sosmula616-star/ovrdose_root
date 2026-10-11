@@ -60,7 +60,7 @@ router.post('/:filename/restore', ownerOnly, auditAction('restore_backup', 'back
   }
 });
 
-router.delete('/:filename', ownerOnly, auditAction('delete_backup', 'backups'), (req, res, next) => {
+router.delete('/:filename', canEdit, auditAction('delete_backup', 'backups'), (req, res, next) => {
   try {
     const backupModule = req.app.locals.client?.modules?.backup;
     if (!backupModule) {

@@ -36,6 +36,10 @@
           <svg class="nav-icon" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/></svg>
           Боты и сервисы
         </a>
+        <a class="nav-item" :class="{ 'active': activeTab === 'channels' }" @click="navigate('channels')">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h7"/><rect width="6" height="6" x="14" y="15" rx="1"/></svg>
+          Каналы и роли
+        </a>
         <a class="nav-item" :class="{ 'active': activeTab === 'rolesync' }" @click="navigate('rolesync')">
           <svg class="nav-icon" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
           Синхронизация ролей
@@ -287,6 +291,162 @@
                       </td>
                     </tr>
                   </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- КАНАЛЫ И РОЛИ (Channels & Roles Management) -->
+        <section x-show="activeTab === 'channels'">
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Управление каналами и ролями</h1>
+              <p class="page-desc">Считывание структуры серверов, авто-пересоздание удаленных каналов, возврат перемещенных категорий и детальное аудит-логирование</p>
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="btn btn-secondary btn-sm" @click="enforceChannels()" title="Запустить сверку структуры">
+                <svg class="nav-icon" viewBox="0 0 24 24"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                Сверить и восстановить
+              </button>
+              <button class="btn btn-secondary btn-sm" @click="setupDefaultChannels()" title="Создать базовые категории и каналы">
+                <svg class="nav-icon" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                Развернуть базовые
+              </button>
+              <button class="btn btn-primary btn-sm" @click="openNewChannelModal()">
+                <svg class="nav-icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Создать канал
+              </button>
+            </div>
+          </div>
+
+          <!-- Метрики каналов -->
+          <div class="stats-grid" style="margin-bottom: 20px;">
+            <div class="stat-card">
+              <div class="stat-label">Всего каналов</div>
+              <div class="stat-value" x-text="channelsData.stats ? channelsData.stats.total : 0"></div>
+              <div class="stat-sub">На текущем сервере</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Каналы администрации</div>
+              <div class="stat-value" style="color: var(--gold);" x-text="channelsData.stats ? channelsData.stats.admin : 0"></div>
+              <div class="stat-sub">Закрытые staff-каналы</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Проходные каналы</div>
+              <div class="stat-value" style="color: #5B8DB8;" x-text="channelsData.stats ? channelsData.stats.transit : 0"></div>
+              <div class="stat-sub">Правила, верификация, инфо</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Каналы аудита</div>
+              <div class="stat-value" style="color: #4EAC6D;" x-text="channelsData.stats ? channelsData.stats.logs : 0"></div>
+              <div class="stat-sub">Текст, войс, роли, сервер</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Под защитой Root</div>
+              <div class="stat-value" style="color: #52B788;" x-text="channelsData.stats ? channelsData.stats.enforced : 0"></div>
+              <div class="stat-sub">24ч авто-восстановление</div>
+            </div>
+          </div>
+
+          <!-- Таблица и фильтры -->
+          <div class="card">
+            <div class="card-header" style="flex-wrap: wrap; gap: 12px;">
+              <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <button class="btn btn-sm" :class="channelFilter === 'all' ? 'btn-primary' : 'btn-ghost'" @click="channelFilter = 'all'">Все каналы</button>
+                <button class="btn btn-sm" :class="channelFilter === 'admin' ? 'btn-primary' : 'btn-ghost'" @click="channelFilter = 'admin'">Администрация</button>
+                <button class="btn btn-sm" :class="channelFilter === 'transit' ? 'btn-primary' : 'btn-ghost'" @click="channelFilter = 'transit'">Проходные</button>
+                <button class="btn btn-sm" :class="channelFilter === 'logs' ? 'btn-primary' : 'btn-ghost'" @click="channelFilter = 'logs'">Журнал аудита</button>
+                <button class="btn btn-sm" :class="channelFilter === 'general' ? 'btn-primary' : 'btn-ghost'" @click="channelFilter = 'general'">Общие</button>
+              </div>
+              <button class="btn btn-ghost btn-sm" @click="loadChannels()">
+                <svg class="nav-icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                Обновить
+              </button>
+            </div>
+
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Канал</th>
+                    <th>Категория</th>
+                    <th>Группа назначения</th>
+                    <th>Защита целостности</th>
+                    <th>Позиция</th>
+                    <th>Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="c in filteredChannels" :key="c.id">
+                    <tr>
+                      <td>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                          <!-- Иконка типа канала -->
+                          <template x-if="c.type === 'text'">
+                            <span style="color: var(--text-muted); font-weight: 600;">#</span>
+                          </template>
+                          <template x-if="c.type === 'voice'">
+                            <svg class="nav-icon" style="width: 14px; height: 14px; color: #5B8DB8;" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                          </template>
+                          <template x-if="c.type === 'announcement'">
+                            <svg class="nav-icon" style="width: 14px; height: 14px; color: var(--gold);" viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+                          </template>
+                          <div>
+                            <div style="font-weight: 500;" x-text="c.name"></div>
+                            <div class="mono" style="font-size: 11px; color: var(--text-muted);" x-text="c.id"></div>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span class="mono" style="color: var(--text-muted);" x-text="c.categoryName || '—'"></span>
+                      </td>
+                      <td>
+                        <template x-if="c.groupType === 'admin'">
+                          <span class="badge" style="background: rgba(200,169,106,0.15); color: var(--gold);">⚡ Администрация</span>
+                        </template>
+                        <template x-if="c.groupType === 'transit'">
+                          <span class="badge" style="background: rgba(91,141,184,0.15); color: #5B8DB8;">🚪 Проходной</span>
+                        </template>
+                        <template x-if="c.groupType === 'log_text'">
+                          <span class="badge" style="background: rgba(78,172,109,0.15); color: #4EAC6D;">📝 Лог текста</span>
+                        </template>
+                        <template x-if="c.groupType === 'log_voice'">
+                          <span class="badge" style="background: rgba(78,172,109,0.15); color: #4EAC6D;">🎙️ Лог войса</span>
+                        </template>
+                        <template x-if="c.groupType === 'log_roles'">
+                          <span class="badge" style="background: rgba(78,172,109,0.15); color: #4EAC6D;">🎭 Лог ролей</span>
+                        </template>
+                        <template x-if="c.groupType === 'log_audit'">
+                          <span class="badge" style="background: rgba(78,172,109,0.15); color: #4EAC6D;">🛡️ Журнал аудита</span>
+                        </template>
+                        <template x-if="c.groupType === 'general'">
+                          <span class="badge badge-neutral">Обычный</span>
+                        </template>
+                      </td>
+                      <td>
+                        <template x-if="c.isEnforced">
+                          <span class="badge badge-success" title="При удалении пересоздается, при перемещении возвращается на место">
+                            <span class="badge-dot"></span>
+                            Авто-контроль
+                          </span>
+                        </template>
+                        <template x-if="!c.isEnforced">
+                          <span class="badge badge-neutral">Без защиты</span>
+                        </template>
+                      </td>
+                      <td class="mono" x-text="c.position"></td>
+                      <td>
+                        <div style="display: flex; gap: 6px;">
+                          <button class="btn btn-secondary btn-sm" @click="openEditChannelModal(c)">Настройки</button>
+                          <button class="btn btn-ghost btn-sm" @click="deleteChannel(c.id, c.name)">Удалить</button>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr x-show="filteredChannels.length === 0">
+                    <td colspan="6" class="empty-state">Каналы не найдены или структура не загружена</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -1103,6 +1263,115 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" @click="newRoleMapModal.open = false">Отмена</button>
         <button class="btn btn-primary" @click="createRoleMap()">Создать связку</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО СОЗДАНИЯ КАНАЛА -->
+  <div class="modal-backdrop" x-show="newChannelModal.open" style="display: none;">
+    <div class="modal">
+      <div class="modal-header">Создание канала через Root</div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Название канала</label>
+          <input type="text" class="form-input" placeholder="например, staff-chat или правила" x-model="newChannelModal.name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Сервер назначения</label>
+          <select class="form-select" x-model="newChannelModal.guildId">
+            <option :value="guilds.main.id">Main Сервер (Основной)</option>
+            <option :value="guilds.staff.id">Staff Сервер (Администрация)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Тип канала</label>
+          <select class="form-select" x-model="newChannelModal.type">
+            <option value="text">Текстовый канал (#)</option>
+            <option value="voice">Голосовой канал (🔊)</option>
+            <option value="announcement">Канал объявлений (📢)</option>
+            <option value="category">Категория (📁)</option>
+            <option value="stage">Канал трибуны / Сцена</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Группа и назначение</label>
+          <select class="form-select" x-model="newChannelModal.groupType">
+            <option value="admin">⚡ Администрация (Закрытый для стаффа)</option>
+            <option value="transit">🚪 Проходной (Правила, верификация, добро пожаловать)</option>
+            <option value="log_text">📝 Лог сообщений (Удаление, изменение текста)</option>
+            <option value="log_voice">🎙️ Лог войса (Вход, выход, перемещения)</option>
+            <option value="log_roles">🎭 Лог ролей (Выдача, снятие, изменения)</option>
+            <option value="log_audit">🛡️ Журнал аудита (Баны, кики, таймауты, сервер)</option>
+            <option value="general">🌐 Общий канал</option>
+          </select>
+        </div>
+        <div class="form-group" x-show="newChannelModal.type !== 'category'">
+          <label class="form-label">Родительская категория</label>
+          <select class="form-select" x-model="newChannelModal.categoryId">
+            <option value="">Без категории</option>
+            <template x-for="cat in (channelsData.categories || [])" :key="cat.id">
+              <option :value="cat.id" x-text="`📁 ${cat.name}`"></option>
+            </template>
+          </select>
+        </div>
+        <div class="form-group">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px;">
+            <input type="checkbox" x-model="newChannelModal.isEnforced">
+            <span>Включить защиту целостности (авто-пересоздание при удалении, авто-возврат при перемещении, сверка каждые 24ч)</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="newChannelModal.open = false">Отмена</button>
+        <button class="btn btn-primary" @click="createChannel()">Создать канал</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО РЕДАКТИРОВАНИЯ КАНАЛА -->
+  <div class="modal-backdrop" x-show="editChannelModal.open" style="display: none;">
+    <div class="modal">
+      <div class="modal-header">Редактирование канала</div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Название канала</label>
+          <input type="text" class="form-input" x-model="editChannelModal.name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Категория</label>
+          <select class="form-select" x-model="editChannelModal.categoryId">
+            <option value="">Без категории</option>
+            <template x-for="cat in (channelsData.categories || [])" :key="cat.id">
+              <option :value="cat.id" x-text="`📁 ${cat.name}`"></option>
+            </template>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Группа назначения</label>
+          <select class="form-select" x-model="editChannelModal.groupType">
+            <option value="admin">⚡ Администрация</option>
+            <option value="transit">🚪 Проходной</option>
+            <option value="log_text">📝 Лог сообщений</option>
+            <option value="log_voice">🎙️ Лог войса</option>
+            <option value="log_roles">🎭 Лог ролей</option>
+            <option value="log_audit">🛡️ Журнал аудита</option>
+            <option value="general">🌐 Общий канал</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Позиция в списке</label>
+          <input type="number" class="form-input mono" x-model.number="editChannelModal.position">
+        </div>
+        <div class="form-group">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px;">
+            <input type="checkbox" x-model="editChannelModal.isEnforced">
+            <span>Защита Root (авто-восстановление и фиксация расположения)</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="editChannelModal.open = false">Отмена</button>
+        <button class="btn btn-primary" @click="saveEditChannel()">Сохранить изменения</button>
       </div>
     </div>
   </div>

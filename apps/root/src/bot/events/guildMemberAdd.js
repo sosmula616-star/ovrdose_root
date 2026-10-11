@@ -15,6 +15,16 @@ module.exports = {
       if (client.modules.antinuke) {
         await client.modules.antinuke.handleMemberAdd(member);
       }
+      // 3. Журнал аудита входа
+      if (client.modules.logging) {
+        const createdAgo = Math.floor(member.user.createdTimestamp / 1000);
+        await client.modules.logging.logAuditEvent({
+          guildId: member.guild.id,
+          action: 'join',
+          user: member.user,
+          details: { text: `Аккаунт создан: <t:${createdAgo}:R> | Всего участников: **${member.guild.memberCount}**` }
+        });
+      }
     } catch (err) {
       logger.error(`[Event:guildMemberAdd] Ошибка: ${err.message}`, { stack: err.stack });
     }

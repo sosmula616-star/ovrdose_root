@@ -144,6 +144,36 @@ document.addEventListener('alpine:init', () => {
     },
     auditLogs: { items: [], total: 0, page: 1 },
 
+    // 12. Управление каналами и ролями (Channels & Roles Management)
+    channelsData: {
+      categories: [],
+      channels: [],
+      stats: { total: 0, admin: 0, transit: 0, logs: 0, enforced: 0 }
+    },
+    channelFilter: 'all', // 'all' | 'admin' | 'transit' | 'logs' | 'general'
+    newChannelModal: {
+      open: false,
+      guildId: '',
+      name: '',
+      type: 'text',
+      groupType: 'admin',
+      categoryId: '',
+      categoryName: '',
+      isEnforced: true,
+    },
+    editChannelModal: {
+      open: false,
+      guildId: '',
+      channelId: '',
+      name: '',
+      type: 'text',
+      groupType: 'admin',
+      categoryId: '',
+      categoryName: '',
+      position: 0,
+      isEnforced: true,
+    },
+
     // Кэш ролей и каналов из Discord для выпадающих списков
     discordRoles: { staff: [], main: [] },
     discordChannels: { staff: [], main: [] },
@@ -152,6 +182,13 @@ document.addEventListener('alpine:init', () => {
     // ИНИЦИАЛИЗАЦИЯ
     // ========================================================================
     async init() {
+      // Определение текущей вкладки из URL
+      const pathTab = window.location.pathname.replace(/^\//, '').split('/')[0];
+      const validTabs = ['dashboard', 'bots', 'channels', 'rolesync', 'permissions', 'moderation', 'economy', 'anticrash', 'logs', 'logchannels', 'backups', 'settings'];
+      if (pathTab && validTabs.includes(pathTab)) {
+        this.activeTab = pathTab;
+      }
+
       // Установка темы
       this.applyTheme(this.theme);
 
@@ -167,15 +204,14 @@ document.addEventListener('alpine:init', () => {
       // Загрузка списков ролей и каналов для обеих гильдий
       await this.loadDiscordMetadata();
 
-      // Первоначальная загрузка
+      // Первоначальная загрузка данных текущей вкладки
       await this.loadSectionData(this.activeTab);
 
       // Обработка клика назад/вперед в истории браузера
       window.addEventListener('popstate', (e) => {
-        if (e.state && e.state.tab) {
-          this.activeTab = e.state.tab;
-          this.loadSectionData(this.activeTab);
-        }
+        const tab = (e.state && e.state.tab) || window.location.pathname.replace(/^\//, '').split('/')[0] || 'dashboard';
+        this.activeTab = tab;
+        this.loadSectionData(this.activeTab);
       });
     },
 
@@ -363,6 +399,9 @@ document.addEventListener('alpine:init', () => {
             break;
           case 'bots':
             await this.loadBots();
+            break;
+          case 'channels':
+            await this.loadChannels();
             break;
           case 'rolesync':
             await this.loadRoleSyncData();
@@ -953,6 +992,152 @@ document.addEventListener('alpine:init', () => {
             await this.apiFetch(`/api/settings/admins/${discordId}`, { method: 'DELETE' });
             this.showToast('success', 'Доступ отозван');
             await this.loadPanelUsers();
+          } catch (e) {
+            this.showToast('error', e.message);
+          }
+        }
+      });
+    },
+
+    // ========================================================================
+    // КАНАЛЫ И РОЛИ (Channels & Roles Management)
+    // ========================================================================
+    async loadChannels() {
+      const gid = this.getActiveGuildId() || this.guilds.main.id;
+      try {
+        const data = await this.apiFetch(`/api/channels?guildId=${gid}`);
+        this.channelsData = data;
+      } catch (e) {
+        this.showToast('error', `Ошибка загрузки каналов: ${e.message}`);
+      }
+    },
+
+    get filteredChannels() {
+      if (!this.channelsData?.channels) return [];
+      if (this.channelFilter === 'all') return this.channelsData.channels;
+      if (this.channelFilter === 'admin') return this.channelsData.channels.filter(c => c.groupType === 'admin');
+      if (this.channelFilter === 'transit') return this.channelsData.channels.filter(c => c.groupType === 'transit');
+      if (this.channelFilter === 'logs') return this.channelsData.channels.filter(c => c.groupType && c.groupType.startsWith('log_'));
+      if (this.channelFilter === 'general') return this.channelsData.channels.filter(c => c.groupType === 'general');
+      return this.channelsData.channels;
+    },
+
+    openNewChannelModal() {
+      this.newChannelModal = {
+        open: true,
+        guildId: this.getActiveGuildId() || this.guilds.main.id,
+        name: '',
+        type: 'text',
+        groupType: 'admin',
+        categoryId: '',
+        categoryName: '',
+        isEnforced: true,
+      };
+    },
+
+    async createChannel() {
+      if (!this.newChannelModal.name.trim()) {
+        this.showToast('error', 'Введите название канала');
+        return;
+      }
+
+      try {
+        await this.apiFetch('/api/channels/create', {
+          method: 'POST',
+          body: JSON.stringify(this.newChannelModal),
+        });
+        this.showToast('success', `Канал #${this.newChannelModal.name} успешно создан через веб-панель`);
+        this.newChannelModal.open = false;
+        await this.loadChannels();
+        await this.loadDiscordMetadata();
+      } catch (e) {
+        this.showToast('error', e.message);
+      }
+    },
+
+    openEditChannelModal(c) {
+      this.editChannelModal = {
+        open: true,
+        guildId: this.getActiveGuildId() || this.guilds.main.id,
+        channelId: c.id,
+        name: c.name,
+        type: c.type,
+        groupType: c.groupType,
+        categoryId: c.categoryId || '',
+        categoryName: c.categoryName || '',
+        position: c.position || 0,
+        isEnforced: Boolean(c.isEnforced),
+      };
+    },
+
+    async saveEditChannel() {
+      try {
+        await this.apiFetch(`/api/channels/${this.editChannelModal.channelId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(this.editChannelModal),
+        });
+        this.showToast('success', 'Канал успешно обновлен на сервере');
+        this.editChannelModal.open = false;
+        await this.loadChannels();
+        await this.loadDiscordMetadata();
+      } catch (e) {
+        this.showToast('error', e.message);
+      }
+    },
+
+    async deleteChannel(channelId, channelName) {
+      this.openConfirm({
+        title: `Удаление канала #${channelName}`,
+        message: `Вы действительно хотите удалить канал #${channelName}? Это действие необратимо.`,
+        confirmBtnText: 'Удалить канал',
+        confirmBtnClass: 'btn-danger',
+        onConfirm: async () => {
+          try {
+            const gid = this.getActiveGuildId() || this.guilds.main.id;
+            await this.apiFetch(`/api/channels/${channelId}?guildId=${gid}`, { method: 'DELETE' });
+            this.showToast('success', `Канал #${channelName} удален`);
+            await this.loadChannels();
+            await this.loadDiscordMetadata();
+          } catch (e) {
+            this.showToast('error', e.message);
+          }
+        }
+      });
+    },
+
+    async enforceChannels() {
+      try {
+        const gid = this.getActiveGuildId();
+        const res = await this.apiFetch('/api/channels/enforce', {
+          method: 'POST',
+          body: JSON.stringify({ guildId: gid }),
+        });
+        const details = res.result;
+        const restored = (details.restored ?? ((details.staff?.restored || 0) + (details.main?.restored || 0))) || 0;
+        const repositioned = (details.repositioned ?? ((details.staff?.repositioned || 0) + (details.main?.repositioned || 0))) || 0;
+        this.showToast('success', `Сверка завершена. Восстановлено каналов: ${restored}, возвращено в категории: ${repositioned}`);
+        await this.loadChannels();
+      } catch (e) {
+        this.showToast('error', e.message);
+      }
+    },
+
+    async setupDefaultChannels() {
+      this.openConfirm({
+        title: 'Развертывание базовой структуры',
+        message: 'Будут созданы категории "⚡ АДМИНИСТРАЦИЯ", "🚪 ПРОХОДНЫЕ КАНАЛЫ", "📋 ЖУРНАЛ АУДИТА" со всеми необходимыми каналами и защитой. Продолжить?',
+        confirmBtnText: 'Развернуть',
+        confirmBtnClass: 'btn-primary',
+        onConfirm: async () => {
+          try {
+            const gid = this.getActiveGuildId() || this.guilds.main.id;
+            await this.apiFetch('/api/channels/setup-defaults', {
+              method: 'POST',
+              body: JSON.stringify({ guildId: gid }),
+            });
+            this.showToast('success', 'Базовая структура успешно развернута на сервере');
+            await this.loadChannels();
+            await this.loadDiscordMetadata();
           } catch (e) {
             this.showToast('error', e.message);
           }

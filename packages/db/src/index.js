@@ -156,4 +156,5 @@ module.exports = {
   get moderation() { return require('./repositories/moderation'); },
   get antinuke()   { return require('./repositories/antinuke'); },
   get system()     { return require('./repositories/system'); },
+  get channels()   { return require('./repositories/channels'); },
 };

@@ -4,12 +4,12 @@
 
 const { ActivityType } = require('discord.js');
 const { registerCommands } = require('../commands/index');
+const { bots: botsRepo } = require('@root-core/db');
 
 module.exports = {
   name: 'ready',
   once: true,
   async execute(readyClient, client, logger) {
-    // В discord.js v14 событие ready передает (readyClient) первым аргументом
     const log = (logger && typeof logger.info === 'function')
       ? logger
       : (client && typeof client.info === 'function')
@@ -24,6 +24,16 @@ module.exports = {
       activities: [{ name: 'Staff & Main | /help', type: ActivityType.Watching }],
       status: 'online',
     });
+
+    // Обновляем статус бота Root в базе данных
+    try {
+      botsRepo.updateBotStatus('root', 'online', '1.0.0');
+      // Запись первичного heartbeat
+      const memRss = parseFloat((process.memoryUsage().rss / (1024 * 1024)).toFixed(1));
+      botsRepo.recordHeartbeat('root', botClient.ws?.ping >= 0 ? botClient.ws.ping : 0, memRss, Math.floor(process.uptime()), botClient.guilds?.cache?.size || 2);
+    } catch (e) {
+      log.warn(`[Bot] Не удалось обновить статус в БД: ${e.message}`);
+    }
 
     // Регистрация слэш-команд на серверах Staff и Main
     await registerCommands(botClient, log);
