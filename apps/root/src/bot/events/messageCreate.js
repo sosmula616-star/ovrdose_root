@@ -8,7 +8,14 @@
  *  - Экономику и кастомные декоративные роли (!createrole, !sellrole, !market, !buyrole, !pay, !daily, !work)
  */
 
-const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const {
+  EmbedBuilder,
+  PermissionFlagsBits,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder
+} = require('discord.js');
 const { economy: ecoRepo, moderation: modRepo, antinuke: antinukeRepo, settings: settingsRepo } = require('@root-core/db');
 
 // Проверка уровня доступа
@@ -538,19 +545,19 @@ module.exports = {
         }
       }
 
-      // --- !market / !roleshop ---
-      if (cmd === 'market' || cmd === 'roleshop') {
+      // --- !market / !shop / !roleshop ---
+      if (cmd === 'market' || cmd === 'shop' || cmd === 'roleshop') {
         const officialItems = await ecoModule.getShop(true);
         const marketRoles = await ecoModule.getMarketplaceRoles(message.guild.id);
 
-        let desc = 'Купить товар/роль: `!buyrole <ID>`\n\n';
+        let desc = '🛍️ **Выберите роль в выпадающем меню ниже**, чтобы увидеть доступные периоды (1 мес, 3 мес, 6 мес, 1 год, навсегда) и оформить покупку по активным кнопкам!\n\n';
 
-        desc += '**🛍️ Официальные роли магазина:**\n';
+        desc += '**👑 Официальные роли магазина:**\n';
         if (officialItems.length === 0) {
           desc += '*В официальном магазине пока нет ролей*\n\n';
         } else {
           for (const it of officialItems) {
-            desc += `• **[ID: ${it.id}]** ${it.name} — **${it.price} ${config.currencySymbol}** ${it.description ? `(${it.description})` : ''}\n`;
+            desc += `• **${it.name}** — от **${it.price} ${config.currencySymbol}** ${it.description ? `(${it.description})` : ''}\n`;
           }
           desc += '\n';
         }
@@ -560,7 +567,9 @@ module.exports = {
           desc += '*На маркетплейсе пока нет выставленных ролей*\n';
         } else {
           for (const r of marketRoles) {
-            desc += `• **[ID: ${r.role_id}]** <@&${r.role_id}> — **${r.price} ${config.currencySymbol}** (автор: <@${r.owner_id}>, купили: ${r.buyers_count})\n`;
+            const iconBadge = r.icon ? `${r.icon} ` : '';
+            const gradBadge = r.is_gradient ? ' 🌈' : '';
+            desc += `• ${iconBadge}<@&${r.role_id}>${gradBadge} — базовая цена: **${r.price} ${config.currencySymbol}** (автор: <@${r.owner_id}>, купили: ${r.buyers_count})\n`;
           }
         }
 
@@ -568,16 +577,237 @@ module.exports = {
           .setTitle(`🛒 Магазин ролей и Маркетплейс — ${message.guild.name}`)
           .setColor(0xC8A96A)
           .setDescription(desc)
-          .setFooter({ text: 'Создать свою роль: !createrole <Название> [#цвет]' });
-        return message.reply({ embeds: [embed] });
+          .setFooter({ text: 'Создать свою роль: !createrole • Меню настройки роли: !rolemenu' });
+
+        const selectOptions = [];
+        for (const it of officialItems) {
+          if (selectOptions.length >= 25) break;
+          const targetVal = String(it.role_id || it.id);
+          selectOptions.push({
+            label: it.name.slice(0, 100),
+            description: `Официальная роль • от ${it.price} ${config.currencySymbol}`.slice(0, 100),
+            value: targetVal,
+            emoji: '👑',
+          });
+        }
+        for (const r of marketRoles) {
+          if (selectOptions.length >= 25) break;
+          selectOptions.push({
+            label: (r.name || `Роль ${r.role_id}`).slice(0, 100),
+            description: `Маркетплейс • от ${r.price} ${config.currencySymbol}`.slice(0, 100),
+            value: String(r.role_id),
+            emoji: '🎨',
+          });
+        }
+
+        const components = [];
+        if (selectOptions.length > 0) {
+          const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('select_shop_role')
+            .setPlaceholder('🛒 Нажмите для выбора роли и периода подписки...')
+            .addOptions(selectOptions);
+
+          components.push(new ActionRowBuilder().addComponents(selectMenu));
+        }
+
+        const quickButtons = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId('open_my_role_menu')
+            .setLabel('🎨 Мои роли (!rolemenu)')
+            .setStyle(ButtonStyle.Secondary)
+        );
+        components.push(quickButtons);
+
+        return message.reply({ embeds: [embed], components });
+      }
+
+      // --- !rolemenu / !myrole / !myroles ---
+      if (cmd === 'rolemenu' || cmd === 'myrole' || cmd === 'myroles') {
+        const userRoles = ecoRepo.getCustomRolesByUser(message.author.id);
+        const maxLimit = config.maxCustomRolesPerUser || 2;
+
+        if (!userRoles || userRoles.length === 0) {
+          const embed = new EmbedBuilder()
+            .setTitle('🎨 Управление кастомными ролями')
+            .setColor(0xC8A96A)
+            .setDescription(
+              `У вас пока нет созданных кастомных ролей.\n\n` +
+              `• Создать персональную декоративную роль:\n` +
+              `\`!createrole <Название_роли> [#HEX_цвет]\`\n\n` +
+              `• Лимит на создание: **не более ${maxLimit}-х ролей на участника**.\n` +
+              `• Стоимость создания: **${config.roleCreatePrice || 5000} ${config.currencySymbol}**\n` +
+              `• После создания вам будут доступны: смена названия, цвета, эмодзи/иконка буста, градиент и продажа на Маркетплейсе!`
+            );
+          return message.reply({ embeds: [embed] });
+        }
+
+        for (const r of userRoles) {
+          const embed = new EmbedBuilder()
+            .setTitle(`🎨 Настройки роли: ${r.name}`)
+            .setColor(r.color ? parseInt(r.color.replace('#', ''), 16) || 0xC8A96A : 0xC8A96A)
+            .setDescription(
+              `Роль на сервере: <@&${r.role_id}>\n` +
+              `Статус продажи: ${r.is_for_sale ? `🏷️ Выставлена за **${r.price} ${config.currencySymbol}**` : '🔒 Личная (не выставлена)'}\n\n` +
+              `**Параметры оформления:**\n` +
+              `• **Цвет:** \`${r.color || '#C8A96A'}\` (Смена: \`${config.roleColorPrice || 300} ${config.currencySymbol}\`)\n` +
+              `• **Название:** **${r.name}** (Смена: \`${config.roleRenamePrice || 500} ${config.currencySymbol}\`)\n` +
+              `• **Эмодзи/иконка буста:** ${r.icon ? `\`${r.icon}\`` : '*Не установлена*'} (Установка: \`${config.roleIconPrice || 1500} ${config.currencySymbol}\`)\n` +
+              `• **Градиентное оформление:** ${r.is_gradient ? '🌈 **Активировано**' : `*Отключено* (Покупка: \`${config.roleGradientPrice || 2500} ${config.currencySymbol}\`)`}\n` +
+              `• **Купили другие игроки:** \`${r.buyers_count || 0}\` шт.`
+            )
+            .setFooter({ text: `ID: ${r.role_id} • Ваши роли: ${userRoles.length}/${maxLimit}` });
+
+          const row1 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`role_act_rename_${r.role_id}`).setLabel(`✏️ Имя (${config.roleRenamePrice || 500})`).setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId(`role_act_color_${r.role_id}`).setLabel(`🎨 Цвет (${config.roleColorPrice || 300})`).setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId(`role_act_icon_${r.role_id}`).setLabel(`✨ Эмодзи (${config.roleIconPrice || 1500})`).setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId(`role_act_gradient_${r.role_id}`).setLabel(`🌈 Градиент (${config.roleGradientPrice || 2500})`).setStyle(r.is_gradient ? ButtonStyle.Secondary : ButtonStyle.Success).setDisabled(Boolean(r.is_gradient))
+          );
+
+          const row2 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`role_act_sell_${r.role_id}`).setLabel('🏷️ Выставить / цена').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(`role_act_del_${r.role_id}`).setLabel('🗑️ Удалить').setStyle(ButtonStyle.Danger)
+          );
+
+          await message.reply({ embeds: [embed], components: [row1, row2] });
+        }
+        return;
+      }
+
+      // --- !role-rename <ID_роли> <Новое название> ---
+      if (cmd === 'role-rename') {
+        const roleId = parseUserId(args[0]) || args[0];
+        const newName = args.slice(1).join(' ').trim();
+        if (!roleId || !newName) {
+          return message.reply(`⚠️ Использование: \`!role-rename <ID_роли> <Новое название>\`\nСтоимость: **${config.roleRenamePrice || 500} ${config.currencySymbol}**`);
+        }
+        try {
+          const res = await ecoModule.renameCustomRole(message.guild, message.author.id, roleId, newName);
+          return message.reply(`✏️ Название роли успешно изменено на **${res.name}**! Списано: **${res.pricePaid} ${res.currency}**.`);
+        } catch (err) {
+          return message.reply(`❌ ${err.message}`);
+        }
+      }
+
+      // --- !role-color <ID_роли> <#HEX> ---
+      if (cmd === 'role-color') {
+        const roleId = parseUserId(args[0]) || args[0];
+        let hex = args[1];
+        if (!roleId || !hex) {
+          return message.reply(`⚠️ Использование: \`!role-color <ID_роли> <#HEX-цвет>\`\nПример: \`!role-color 123456789012345678 #FF5733\`\nСтоимость: **${config.roleColorPrice || 300} ${config.currencySymbol}**`);
+        }
+        if (!hex.startsWith('#')) hex = `#${hex}`;
+        try {
+          const res = await ecoModule.changeCustomRoleColor(message.guild, message.author.id, roleId, hex);
+          return message.reply(`🎨 Цвет роли успешно изменен на \`${res.color}\`! Списано: **${res.pricePaid} ${res.currency}**.`);
+        } catch (err) {
+          return message.reply(`❌ ${err.message}`);
+        }
+      }
+
+      // --- !role-icon <ID_роли> <эмодзи|URL> ---
+      if (cmd === 'role-icon') {
+        const roleId = parseUserId(args[0]) || args[0];
+        const iconInput = args.slice(1).join(' ').trim();
+        if (!roleId || !iconInput) {
+          return message.reply(`⚠️ Использование: \`!role-icon <ID_роли> <эмодзи_или_URL>\`\nСтоимость: **${config.roleIconPrice || 1500} ${config.currencySymbol}**`);
+        }
+        try {
+          const res = await ecoModule.setCustomRoleIcon(message.guild, message.author.id, roleId, iconInput);
+          return message.reply(`✨ Иконка/эмодзи буста для роли успешно установлена (${res.icon})! Списано: **${res.pricePaid} ${res.currency}**.`);
+        } catch (err) {
+          return message.reply(`❌ ${err.message}`);
+        }
+      }
+
+      // --- !role-gradient <ID_роли> ---
+      if (cmd === 'role-gradient') {
+        const roleId = parseUserId(args[0]) || args[0];
+        if (!roleId) {
+          return message.reply(`⚠️ Использование: \`!role-gradient <ID_роли>\`\nСтоимость: **${config.roleGradientPrice || 2500} ${config.currencySymbol}**`);
+        }
+        try {
+          const res = await ecoModule.setCustomRoleGradient(message.guild, message.author.id, roleId);
+          return message.reply(`🌈 Градиентное оформление успешно приобретено и активировано для роли <@&${roleId}>! Списано: **${res.pricePaid} ${res.currency}**.`);
+        } catch (err) {
+          return message.reply(`❌ ${err.message}`);
+        }
+      }
+
+      // --- !delrole <ID_роли> ---
+      if (cmd === 'delrole' || cmd === 'deleterole') {
+        const roleId = parseUserId(args[0]) || args[0];
+        if (!roleId) return message.reply('⚠️ Использование: `!delrole <ID_роли>`');
+        try {
+          await ecoModule.deleteCustomRole(message.guild, roleId, message.author.id);
+          return message.reply('🗑️ Ваша кастомная роль успешно удалена.');
+        } catch (err) {
+          return message.reply(`❌ ${err.message}`);
+        }
+      }
+
+      // --- !give <@user|id> <amount> [причина] --- (ТОЛЬКО АДМИНИСТРАЦИЯ)
+      if (cmd === 'give') {
+        if (!access.isAdmin) {
+          return message.reply('🚫 У вас недостаточно прав для выдачи монет.');
+        }
+        const targetId = parseUserId(args[0]);
+        const amount = parseInt(args[1], 10);
+        const reason = args.slice(2).join(' ') || 'Выдача администратором';
+        if (!targetId || isNaN(amount) || amount <= 0) {
+          return message.reply('⚠️ Использование: `!give <@пользователь|ID> <кол-во> [причина]`');
+        }
+        try {
+          const res = await ecoModule.give(targetId, amount, reason, message.author.tag);
+          return message.reply(`💰 Пользователю <@${targetId}> успешно выдано **+${amount} ${config.currencySymbol}**! Новый баланс: **${res.newBalance} ${config.currencySymbol}**`);
+        } catch (err) {
+          return message.reply(`❌ ${err.message}`);
+        }
+      }
+
+      // --- !take <@user|id> <amount> [причина] --- (ТОЛЬКО АДМИНИСТРАЦИЯ)
+      if (cmd === 'take') {
+        if (!access.isAdmin) {
+          return message.reply('🚫 У вас недостаточно прав для списания монет.');
+        }
+        const targetId = parseUserId(args[0]);
+        const amount = parseInt(args[1], 10);
+        const reason = args.slice(2).join(' ') || 'Списание администратором';
+        if (!targetId || isNaN(amount) || amount <= 0) {
+          return message.reply('⚠️ Использование: `!take <@пользователь|ID> <кол-во> [причина]`');
+        }
+        try {
+          const res = await ecoModule.take(targetId, amount, reason, message.author.tag);
+          return message.reply(`💸 У пользователя <@${targetId}> списано **-${amount} ${config.currencySymbol}**! Новый баланс: **${res.newBalance} ${config.currencySymbol}**`);
+        } catch (err) {
+          return message.reply(`❌ ${err.message}`);
+        }
+      }
+
+      // --- !setbalance <@user|id> <amount> [причина] --- (ТОЛЬКО АДМИНИСТРАЦИЯ)
+      if (cmd === 'setbalance') {
+        if (!access.isAdmin) {
+          return message.reply('🚫 У вас недостаточно прав для изменения баланса.');
+        }
+        const targetId = parseUserId(args[0]);
+        const amount = parseInt(args[1], 10);
+        const reason = args.slice(2).join(' ') || 'Установка администратором';
+        if (!targetId || isNaN(amount) || amount < 0) {
+          return message.reply('⚠️ Использование: `!setbalance <@пользователь|ID> <новый_баланс> [причина]`');
+        }
+        try {
+          const res = await ecoModule.set(targetId, amount, reason, message.author.tag);
+          return message.reply(`🏛️ Баланс пользователя <@${targetId}> установлен на **${amount} ${config.currencySymbol}**.`);
+        } catch (err) {
+          return message.reply(`❌ ${err.message}`);
+        }
       }
 
       // --- !buyrole <ID> ---
       if (cmd === 'buyrole' || cmd === 'buy') {
         const itemIdOrRoleId = args[0];
-        if (!itemIdOrRoleId) return message.reply('⚠️ Использование: `!buyrole <ID_товара_или_роли>`\nПосмотреть каталог: `!market`');
+        if (!itemIdOrRoleId) return message.reply('⚠️ Использование: `!buyrole <ID_товара_или_роли>`\nПосмотреть каталог с активными кнопками: `!shop`');
 
-        // Проверяем, это числовой ID товара магазина или Discord ID роли на маркете
         const numId = parseInt(itemIdOrRoleId, 10);
         let shopItem = null;
         if (!isNaN(numId) && numId < 1000000) {
@@ -585,15 +815,13 @@ module.exports = {
         }
 
         if (shopItem) {
-          // Покупка официального товара
           const buyRes = await ecoModule.buy(message.author.id, shopItem.id, message.guild);
           if (!buyRes.ok) return message.reply(`❌ ${buyRes.message}`);
           return message.reply(`🎉 Вы успешно приобрели **${shopItem.name}** за **${shopItem.price} ${config.currencySymbol}**!`);
         } else {
-          // Покупка кастомной роли на маркетплейсе
           try {
             const buyCustom = await ecoModule.buyCustomRole(message.guild, message.author.id, itemIdOrRoleId);
-            return message.reply(`🎉 Вы успешно приобрели кастомную роль **${buyCustom.roleItem.name}** за **${buyCustom.price} ${buyCustom.currency}**! Автор получил выплату.`);
+            return message.reply(`🎉 Вы успешно приобрели кастомную роль **${buyCustom.roleItem.name}** за **${buyCustom.price} ${buyCustom.currency}**!`);
           } catch (err) {
             return message.reply(`❌ ${err.message}`);
           }
@@ -603,17 +831,22 @@ module.exports = {
       // --- !help ---
       if (cmd === 'help') {
         let helpText = '**👤 Пользовательские команды:**\n' +
-          '`!profile [@user]` — просмотр карточки профиля\n' +
+          '`!profile [@user]` — красивый профиль пользователя\n' +
           '`!balance` / `!bal` — проверить баланс\n' +
           '`!daily` — ежедневная награда\n' +
           '`!work` — заработок на работе\n' +
           '`!pay <@user> <сумма>` — перевод средств\n' +
-          '`!leaderboard` / `!top` — топ богачей\n' +
-          '`!createrole <название> [#цвет]` — создать кастомную декоративную роль\n' +
-          '`!sellrole <ID_роли> <цена>` — выставить роль на продажу\n' +
-          '`!removesell <ID_роли>` — снять роль с продажи\n' +
-          '`!market` — витрина ролей и маркетплейса\n' +
-          '`!buyrole <ID>` — купить роль\n';
+          '`!leaderboard` / `!top` — топ богачей сервера\n' +
+          '`!shop` / `!market` — интерактивный магазин с кнопками и периодами\n' +
+          '`!createrole <название> [#цвет]` — создать кастомную роль (лимит: 2 роли)\n' +
+          '`!rolemenu` / `!myrole` — меню настроек своей роли (кнопки)\n' +
+          '`!role-rename <ID> <имя>` — сменить название роли\n' +
+          '`!role-color <ID> <#HEX>` — сменить цвет роли\n' +
+          '`!role-icon <ID> <эмодзи|URL>` — установить иконку/эмодзи буста\n' +
+          '`!role-gradient <ID>` — купить градиентное оформление\n' +
+          '`!sellrole <ID> <цена>` — выставить роль на Маркетплейс\n' +
+          '`!removesell <ID>` — снять роль с продажи\n' +
+          '`!delrole <ID>` — удалить свою роль\n';
 
         if (access.isStaff) {
           helpText += '\n**🛡️ Команды администрации и персонала:**\n' +
@@ -628,8 +861,11 @@ module.exports = {
         }
 
         if (access.isAdmin) {
-          helpText += '\n**⚡ Команды управления сервером:**\n' +
-            '`!lockdown [on|off]` — режим экстренной защиты сервера\n' +
+          helpText += '\n**⚡ Экономика и управление сервером (Admin/Host):**\n' +
+            '`!give <@user|ID> <сумма> [причина]` — выдать монеты\n' +
+            '`!take <@user|ID> <сумма> [причина]` — списать монеты\n' +
+            '`!setbalance <@user|ID> <сумма>` — установить точный баланс\n' +
+            '`!lockdown [on|off]` — экстренная защита сервера\n' +
             '`!restore [id]` — откат структуры каналов и ролей\n';
         }
 

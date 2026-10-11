@@ -69,6 +69,7 @@ async function bootstrap() {
   supervisorModule.init();
   backupModule.init();
   channelsModule.init();
+  economyModule.init();
 
   // 4. Загрузка команд и событий бота
   logger.info('[Bot] Загрузка слэш-команд и обработчиков событий...');

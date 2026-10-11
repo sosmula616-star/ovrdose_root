@@ -11,6 +11,15 @@ class EconomyModule {
     this.logger = logger;
   }
 
+  init() {
+    this.subscriptionTimer = setInterval(() => {
+      this.checkExpiredSubscriptions().catch(err => {
+        this.logger.error(`[Economy] Ошибка проверки истекших подписок на роли: ${err.message}`);
+      });
+    }, 5 * 60 * 1000);
+    this.checkExpiredSubscriptions().catch(() => {});
+  }
+
   /**
    * Получение актуальных настроек экономики для сервера
    */
@@ -151,6 +160,13 @@ class EconomyModule {
     if (!guild) throw new Error('Сервер Discord не указан');
     const config = this.getSettings(guild.id);
     const price = config.roleCreatePrice || 5000;
+    const maxRoles = config.maxCustomRolesPerUser || 2;
+
+    // Проверка лимита: не более 2ух ролей на пользователя
+    const existingRoles = economyRepo.getUserCustomRoles(userId);
+    if (existingRoles.length >= maxRoles) {
+      throw new Error(`Вы исчерпали лимит создания ролей (максимум ${maxRoles} роли на пользователя). Удалите одну из своих ролей через меню перед созданием новой.`);
+    }
 
     const wallet = await this.getBalance(userId);
     if (wallet.balance < price) {
@@ -214,6 +230,173 @@ class EconomyModule {
       pricePaid: price,
       currency: config.currencySymbol,
     };
+  }
+
+  /**
+   * Смена названия своей роли
+   */
+  async renameCustomRole(guild, userId, roleId, newName) {
+    const roleItem = economyRepo.getCustomRoleByRoleId(roleId);
+    if (!roleItem) throw new Error('Кастомная роль не найдена');
+    if (roleItem.owner_id !== userId) throw new Error('Вы не являетесь владельцем этой роли');
+
+    const cleanName = String(newName || '').trim().slice(0, 50);
+    if (!cleanName || cleanName.length < 2) throw new Error('Название должно быть от 2 до 50 символов');
+
+    const config = this.getSettings(guild.id);
+    const price = config.roleRenamePrice || 500;
+    const wallet = await this.getBalance(userId);
+    if (wallet.balance < price) {
+      throw new Error(`Недостаточно средств. Стоимость смены названия: ${price} ${config.currencySymbol}, у вас: ${wallet.balance}`);
+    }
+
+    // Изменяем в Discord
+    const discordRole = await guild.roles.fetch(roleId).catch(() => null);
+    if (discordRole) {
+      await discordRole.setName(cleanName, `Смена названия кастомной роли владельцем ${userId}`);
+    }
+
+    economyRepo.modifyBalance(userId, -price, 'role_rename', `Смена названия роли на "${cleanName}"`, null, { roleId });
+    economyRepo.updateCustomRoleName(roleId, userId, cleanName);
+
+    return { ok: true, name: cleanName, pricePaid: price, currency: config.currencySymbol };
+  }
+
+  /**
+   * Смена цвета своей роли
+   */
+  async changeCustomRoleColor(guild, userId, roleId, newHexColor) {
+    const roleItem = economyRepo.getCustomRoleByRoleId(roleId);
+    if (!roleItem) throw new Error('Кастомная роль не найдена');
+    if (roleItem.owner_id !== userId) throw new Error('Вы не являетесь владельцем этой роли');
+
+    let validColor = newHexColor.startsWith('#') ? newHexColor : `#${newHexColor}`;
+    if (!/^#[0-9A-Fa-f]{6}$/.test(validColor)) throw new Error('Некорректный HEX-код цвета (пример: #FF5733)');
+
+    const config = this.getSettings(guild.id);
+    const price = config.roleColorPrice || 300;
+    const wallet = await this.getBalance(userId);
+    if (wallet.balance < price) {
+      throw new Error(`Недостаточно средств. Стоимость смены цвета: ${price} ${config.currencySymbol}, у вас: ${wallet.balance}`);
+    }
+
+    const discordRole = await guild.roles.fetch(roleId).catch(() => null);
+    if (discordRole) {
+      await discordRole.setColor(validColor, `Смена цвета роли владельцем ${userId}`);
+    }
+
+    economyRepo.modifyBalance(userId, -price, 'role_color', `Смена цвета роли на "${validColor}"`, null, { roleId });
+    economyRepo.updateCustomRoleColor(roleId, userId, validColor);
+
+    return { ok: true, color: validColor, pricePaid: price, currency: config.currencySymbol };
+  }
+
+  /**
+   * Установка иконки / эмодзи буста для своей роли
+   */
+  async setCustomRoleIcon(guild, userId, roleId, iconEmojiOrUrl) {
+    const roleItem = economyRepo.getCustomRoleByRoleId(roleId);
+    if (!roleItem) throw new Error('Кастомная роль не найдена');
+    if (roleItem.owner_id !== userId) throw new Error('Вы не являетесь владельцем этой роли');
+
+    const cleanIcon = String(iconEmojiOrUrl || '').trim();
+    if (!cleanIcon) throw new Error('Укажите эмодзи или ссылку на изображение иконки');
+
+    const config = this.getSettings(guild.id);
+    const price = config.roleIconPrice || 1500;
+    const wallet = await this.getBalance(userId);
+    if (wallet.balance < price) {
+      throw new Error(`Недостаточно средств. Стоимость установки иконки: ${price} ${config.currencySymbol}, у вас: ${wallet.balance}`);
+    }
+
+    const discordRole = await guild.roles.fetch(roleId).catch(() => null);
+    if (discordRole) {
+      try {
+        // Если эмодзи или URL
+        if (cleanIcon.startsWith('http://') || cleanIcon.startsWith('https://')) {
+          await discordRole.setIcon(cleanIcon, `Установка иконки роли владельцем ${userId}`);
+        } else {
+          await discordRole.setUnicodeEmoji(cleanIcon, `Установка эмодзи роли владельцем ${userId}`);
+        }
+      } catch (err) {
+        this.logger.warn(`[Economy] Сервер не поддерживает иконки ролей (требуется 2+ уровень буста): ${err.message}`);
+      }
+    }
+
+    economyRepo.modifyBalance(userId, -price, 'role_icon', `Установка иконки/эмодзи роли`, null, { roleId });
+    economyRepo.updateCustomRoleIcon(roleId, userId, cleanIcon);
+
+    return { ok: true, icon: cleanIcon, pricePaid: price, currency: config.currencySymbol };
+  }
+
+  /**
+   * Покупка градиентного оформления для роли
+   */
+  async setCustomRoleGradient(guild, userId, roleId) {
+    const roleItem = economyRepo.getCustomRoleByRoleId(roleId);
+    if (!roleItem) throw new Error('Кастомная роль не найдена');
+    if (roleItem.owner_id !== userId) throw new Error('Вы не являетесь владельцем этой роли');
+
+    if (roleItem.is_gradient) throw new Error('Градиентное оформление уже активировано для этой роли');
+
+    const config = this.getSettings(guild.id);
+    const price = config.roleGradientPrice || 2500;
+    const wallet = await this.getBalance(userId);
+    if (wallet.balance < price) {
+      throw new Error(`Недостаточно средств. Стоимость градиентного оформления: ${price} ${config.currencySymbol}, у вас: ${wallet.balance}`);
+    }
+
+    economyRepo.modifyBalance(userId, -price, 'role_gradient', `Покупка градиентного оформления роли`, null, { roleId });
+    economyRepo.updateCustomRoleGradient(roleId, userId, 1);
+
+    return { ok: true, pricePaid: price, currency: config.currencySymbol };
+  }
+
+  /**
+   * Покупка роли с выбором периода (1 месяц, 3 месяца, 6 месяцев, 1 год, навсегда)
+   */
+  async buyRoleWithPeriod(guild, buyerId, roleId, period = '1_month', basePrice = 1000, sellerId = null) {
+    if (!guild) throw new Error('Сервер не указан');
+    const config = this.getSettings(guild.id);
+    const taxPercent = config.marketplaceTaxPercent !== undefined ? config.marketplaceTaxPercent : 10;
+
+    const result = economyRepo.buyRoleSubscription(buyerId, guild.id, roleId, period, basePrice, sellerId, taxPercent);
+
+    // Выдаем роль в Discord
+    try {
+      const member = await guild.members.fetch(buyerId);
+      if (member && !member.roles.cache.has(roleId)) {
+        await member.roles.add(roleId, `Покупка подписки на роль (${period})`);
+      }
+    } catch (err) {
+      this.logger.warn(`[Economy] Ошибка выдачи роли ${roleId}: ${err.message}`);
+    }
+
+    return { ok: true, ...result, currency: config.currencySymbol };
+  }
+
+  /**
+   * Проверка и снятие истекших подписок на роли
+   */
+  async checkExpiredSubscriptions() {
+    const expired = economyRepo.getExpiredSubscriptions();
+    if (!expired || expired.length === 0) return;
+
+    for (const sub of expired) {
+      try {
+        const guild = this.client.guilds.cache.get(sub.guild_id);
+        if (guild) {
+          const member = await guild.members.fetch(sub.user_id).catch(() => null);
+          if (member && member.roles.cache.has(sub.role_id)) {
+            await member.roles.remove(sub.role_id, `Истек срок подписки на роль (${sub.period})`);
+          }
+        }
+      } catch (err) {
+        this.logger.error(`[Economy] Ошибка снятия истекшей роли ${sub.role_id}: ${err.message}`);
+      } finally {
+        economyRepo.deleteSubscription(sub.id);
+      }
+    }
   }
 
   /**
@@ -283,8 +466,11 @@ class EconomyModule {
   /**
    * Удаление кастомной роли (администратором или создателем)
    */
-  async deleteCustomRole(guild, roleId) {
+  async deleteCustomRole(guild, roleId, userId = null) {
     const roleItem = economyRepo.getCustomRoleByRoleId(roleId);
+    if (userId && roleItem && roleItem.owner_id !== userId) {
+      throw new Error('Вы не являетесь владельцем этой роли');
+    }
     if (guild && roleItem) {
       try {
         const discordRole = await guild.roles.fetch(roleId).catch(() => null);

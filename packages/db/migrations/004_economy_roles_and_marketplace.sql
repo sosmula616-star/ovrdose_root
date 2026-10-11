@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS custom_roles (
   role_id       TEXT NOT NULL UNIQUE,     -- Discord ID созданной роли
   name          TEXT NOT NULL,            -- Название роли
   color         TEXT NOT NULL DEFAULT '#C8A96A', -- HEX цвет
+  icon          TEXT,                            -- Эмодзи или URL иконки роли для буста
+  is_gradient   INTEGER NOT NULL DEFAULT 0,      -- 1 = куплено градиентное оформление
   for_sale      INTEGER NOT NULL DEFAULT 0, -- 1 = выставлена на маркетплейс
   price         INTEGER NOT NULL DEFAULT 0, -- Цена на маркетплейсе
   buyers_count  INTEGER NOT NULL DEFAULT 0, -- Количество купивших пользователей

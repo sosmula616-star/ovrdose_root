@@ -770,8 +770,8 @@
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                   <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label">Комиссия перевода (!pay) %</label>
-                    <input type="number" class="form-input mono" x-model.number="ecoSettings.transferTaxPercent" @input="ecoSettingsModified = true" min="0" max="50">
+                    <label class="form-label">Дневной лимит перевода (!pay)</label>
+                    <input type="number" class="form-input mono" x-model.number="ecoSettings.transferLimitDay" @input="ecoSettingsModified = true" min="0">
                   </div>
                   <div class="form-group" style="margin-bottom: 0;">
                     <label class="form-label">Стартовый баланс</label>
@@ -785,8 +785,41 @@
                     <input type="number" class="form-input mono" x-model.number="ecoSettings.roleCreatePrice" @input="ecoSettingsModified = true" min="0">
                   </div>
                   <div class="form-group" style="margin-bottom: 0;">
-                    <label class="form-label">Комиссия маркетплейса %</label>
-                    <input type="number" class="form-input mono" x-model.number="ecoSettings.marketplaceTaxPercent" @input="ecoSettingsModified = true" min="0" max="50">
+                    <label class="form-label">Лимит ролей на юзера (макс)</label>
+                    <input type="number" class="form-input mono" x-model.number="ecoSettings.maxCustomRolesPerUser" @input="ecoSettingsModified = true" min="1" max="50">
+                  </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Комиссия маркетплейса % (0-100%)</label>
+                    <input type="number" class="form-input mono" x-model.number="ecoSettings.marketplaceTaxPercent" @input="ecoSettingsModified = true" min="0" max="100">
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Смена названия (!role-rename)</label>
+                    <input type="number" class="form-input mono" x-model.number="ecoSettings.roleRenamePrice" @input="ecoSettingsModified = true" min="0">
+                  </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Смена цвета (!role-color)</label>
+                    <input type="number" class="form-input mono" x-model.number="ecoSettings.roleColorPrice" @input="ecoSettingsModified = true" min="0">
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Эмодзи/иконка буста (!role-icon)</label>
+                    <input type="number" class="form-input mono" x-model.number="ecoSettings.roleIconPrice" @input="ecoSettingsModified = true" min="0">
+                  </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Градиент роли (!role-gradient)</label>
+                    <input type="number" class="form-input mono" x-model.number="ecoSettings.roleGradientPrice" @input="ecoSettingsModified = true" min="0">
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Комиссия перевода (!pay) %</label>
+                    <input type="number" class="form-input mono" x-model.number="ecoSettings.transferTaxPercent" @input="ecoSettingsModified = true" min="0" max="100">
                   </div>
                 </div>
 

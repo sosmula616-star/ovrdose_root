@@ -39,7 +39,12 @@ module.exports = {
     TRANSFER_MIN_AGE_DAYS: 3,
     START_BALANCE: 0,
     ROLE_CREATE_PRICE: 5000,         // Стоимость создания декоративной роли
-    MARKETPLACE_TAX_PERCENT: 10,     // Комиссия маркета при продаже роли другому игроку (%)
+    ROLE_RENAME_PRICE: 500,          // Стоимость смены названия роли
+    ROLE_COLOR_PRICE: 300,           // Стоимость смены цвета роли
+    ROLE_ICON_PRICE: 1500,           // Стоимость установки эмодзи/иконки буста
+    ROLE_GRADIENT_PRICE: 2500,       // Стоимость градиентного оформления
+    MAX_CUSTOM_ROLES_PER_USER: 2,    // Лимит ролей на пользователя (не более 2)
+    MARKETPLACE_TAX_PERCENT: 10,     // Комиссия маркета (0-100%)
     VOICE_REWARD_PER_MIN: 5,         // Награда за 1 минуту в голосовом канале
     MESSAGE_REWARD: 2,               // Награда за сообщения в чате
     MESSAGE_COOLDOWN: 30,            // Кулдаун награды за сообщения (сек)

@@ -334,6 +334,113 @@ const economyRepo = {
     return tx();
   },
 
+  // --- Настройка и кастомизация своей роли ---
+  updateCustomRoleName(roleId, ownerId, newName) {
+    return getDb().prepare(`
+      UPDATE custom_roles SET name = ?, updated_at = datetime('now')
+      WHERE role_id = ? AND owner_id = ?
+    `).run(newName, roleId, ownerId);
+  },
+
+  updateCustomRoleColor(roleId, ownerId, newColor) {
+    return getDb().prepare(`
+      UPDATE custom_roles SET color = ?, updated_at = datetime('now')
+      WHERE role_id = ? AND owner_id = ?
+    `).run(newColor, roleId, ownerId);
+  },
+
+  updateCustomRoleIcon(roleId, ownerId, newIcon) {
+    return getDb().prepare(`
+      UPDATE custom_roles SET icon = ?, updated_at = datetime('now')
+      WHERE role_id = ? AND owner_id = ?
+    `).run(newIcon, roleId, ownerId);
+  },
+
+  updateCustomRoleGradient(roleId, ownerId, isGradient = 1) {
+    return getDb().prepare(`
+      UPDATE custom_roles SET is_gradient = ?, updated_at = datetime('now')
+      WHERE role_id = ? AND owner_id = ?
+    `).run(isGradient ? 1 : 0, roleId, ownerId);
+  },
+
+  // --- Подписки на роли по срокам (1м, 3м, 6м, 1 год, навсегда) ---
+  calculatePeriodPrice(basePrice, period) {
+    const p = Math.max(1, parseInt(basePrice || 0, 10));
+    switch (period) {
+      case '1_month':  return p;
+      case '3_months': return Math.round(p * 2.5);
+      case '6_months': return Math.round(p * 4.5);
+      case '1_year':   return Math.round(p * 8.0);
+      case 'forever':  return Math.round(p * 12.0);
+      default:         return p;
+    }
+  },
+
+  calculateExpiresAt(period) {
+    const now = Date.now();
+    switch (period) {
+      case '1_month':  return new Date(now + 30 * 86400 * 1000).toISOString();
+      case '3_months': return new Date(now + 90 * 86400 * 1000).toISOString();
+      case '6_months': return new Date(now + 180 * 86400 * 1000).toISOString();
+      case '1_year':   return new Date(now + 365 * 86400 * 1000).toISOString();
+      case 'forever':  return null;
+      default:         return null;
+    }
+  },
+
+  buyRoleSubscription(buyerId, guildId, roleId, period, basePrice, sellerId = null, taxPercent = 10) {
+    const db = getDb();
+    const tx = db.transaction(() => {
+      const price = this.calculatePeriodPrice(basePrice, period);
+      const buyerWallet = this.getWallet(buyerId);
+      if (buyerWallet.balance < price) {
+        throw new Error(`Недостаточно средств. Стоимость периода: ${price}, на балансе: ${buyerWallet.balance}`);
+      }
+
+      const expiresAt = this.calculateExpiresAt(period);
+
+      // Списание у покупателя
+      this.modifyBalance(buyerId, -price, 'role_subscription_buy', `Покупка роли на период (${period})`, sellerId, { roleId, period, expiresAt });
+
+      // Если продавец указан (маркетплейс кастомных ролей)
+      let sellerReward = 0;
+      let tax = 0;
+      if (sellerId && sellerId !== buyerId) {
+        const clampedTax = Math.min(100, Math.max(0, parseInt(taxPercent ?? 10, 10)));
+        tax = Math.floor(price * (clampedTax / 100));
+        sellerReward = price - tax;
+        if (sellerReward > 0) {
+          this.modifyBalance(sellerId, sellerReward, 'role_subscription_sell', `Продажа роли на период (${period}) с комиссией ${tax}`, buyerId, { roleId, period, tax });
+        }
+      }
+
+      // Сохраняем подписку
+      const res = db.prepare(`
+        INSERT INTO role_subscriptions (guild_id, user_id, role_id, period, price_paid, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(guildId, buyerId, roleId, period, price, expiresAt);
+
+      // Обновляем статистику если это кастомная роль
+      db.prepare(`
+        UPDATE custom_roles SET buyers_count = buyers_count + 1 WHERE role_id = ?
+      `).run(roleId);
+
+      return { subId: res.lastInsertRowid, price, expiresAt, sellerReward, tax };
+    });
+
+    return tx();
+  },
+
+  getExpiredSubscriptions() {
+    return getDb().prepare(`
+      SELECT * FROM role_subscriptions WHERE expires_at IS NOT NULL AND expires_at <= datetime('now')
+    `).all();
+  },
+
+  deleteSubscription(id) {
+    return getDb().prepare('DELETE FROM role_subscriptions WHERE id = ?').run(id);
+  },
+
   // --- Статистика стаффа и модераторов ---
   getStaffStats(guildId, userId) {
     let row = getDb().prepare(`
