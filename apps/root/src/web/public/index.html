@@ -568,11 +568,12 @@
           </div>
 
           <div class="grid-2col">
+            <!-- Доверенные пользователи -->
             <div class="card">
               <div class="card-header"><span class="card-title">Доверенные пользователи (Whitelist Users)</span></div>
               <div class="card-body">
                 <div style="display: flex; gap: 10px; margin-bottom: 16px;">
-                  <input type="text" class="form-input mono" placeholder="Discord ID пользователя..." x-model="accessSettings.newTrustedId">
+                  <input type="text" class="form-input mono" placeholder="Discord ID пользователя..." x-model="accessSettings.newTrustedId" @keydown.enter="addTrustedUser()">
                   <button class="btn btn-primary" @click="addTrustedUser()">Добавить</button>
                 </div>
                 <div class="table-responsive">
@@ -592,10 +593,42 @@
               </div>
             </div>
 
+            <!-- Доверенные роли -->
             <div class="card">
+              <div class="card-header"><span class="card-title">Доверенные роли (Whitelist Roles)</span></div>
+              <div class="card-body">
+                <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+                  <select class="form-select" x-model="accessSettings.newTrustedRoleId" style="flex: 1;">
+                    <option value="">-- Выберите роль --</option>
+                    <template x-for="r in (selectedGuild === 'staff' ? discordRoles.staff : discordRoles.main)" :key="r.id">
+                      <option :value="r.id" x-text="`${r.name} (${r.id})`"></option>
+                    </template>
+                  </select>
+                  <button class="btn btn-primary" @click="addTrustedRole()">Добавить</button>
+                </div>
+                <div class="table-responsive">
+                  <table class="data-table">
+                    <thead><tr><th>Роль</th><th>ID роли</th><th>Действие</th></tr></thead>
+                    <tbody>
+                      <template x-for="rid in accessSettings.whitelist_roles" :key="rid">
+                        <tr>
+                          <td style="font-weight: 500;" x-text="getRoleById(rid)?.name || 'Неизвестная роль'"></td>
+                          <td class="mono" x-text="rid"></td>
+                          <td><button class="btn btn-danger btn-sm" @click="removeTrustedRole(rid)">Удалить</button></td>
+                        </tr>
+                      </template>
+                      <tr x-show="accessSettings.whitelist_roles.length === 0"><td colspan="3" class="empty-state">Список пуст</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Владельцы системы -->
+            <div class="card" style="grid-column: 1 / -1;">
               <div class="card-header"><span class="card-title">Владельцы системы (OWNER_IDS)</span></div>
               <div class="card-body">
-                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">Задаются в едином файле .env. Имеют абсолютный доступ к критическим операциям (восстановление БД, антикраш).</p>
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">Задаются в файле конфигурации .env. Имеют абсолютный доступ ко всем критическим операциям системы и полный обход антикраша.</p>
                 <div class="form-input mono" style="display: flex; align-items: center;" x-text="accessSettings.root_owner_ids || 'Не настроены'"></div>
               </div>
             </div>

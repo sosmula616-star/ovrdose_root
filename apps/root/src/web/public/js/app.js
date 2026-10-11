@@ -80,6 +80,7 @@ document.addEventListener('alpine:init', () => {
       whitelist_users: [],
       whitelist_roles: [],
       newTrustedId: '',
+      newTrustedRoleId: '',
     },
 
     // 5. Moderation
@@ -619,24 +620,28 @@ document.addEventListener('alpine:init', () => {
       const gid = this.getActiveGuildId() || this.guilds.main.id;
       const data = await this.apiFetch(`/api/permissions?guildId=${gid}`);
       this.accessSettings = {
-        root_owner_ids: data.owner_ids?.join(', ') || '',
-        whitelist_users: data.whitelist_users || [],
-        whitelist_roles: data.whitelist_roles || [],
+        root_owner_ids: (data.owner_ids || []).join(', ') || '',
+        whitelist_users: data.whitelist_users || data.trustedUsers || [],
+        whitelist_roles: data.whitelist_roles || data.trustedRoles || [],
         newTrustedId: '',
+        newTrustedRoleId: '',
       };
     },
 
     async addTrustedUser() {
-      if (!this.accessSettings.newTrustedId) return;
+      const userId = (this.accessSettings.newTrustedId || '').trim();
+      if (!userId) {
+        this.showToast('error', 'Введите Discord ID пользователя');
+        return;
+      }
       const gid = this.getActiveGuildId() || this.guilds.main.id;
-      const list = [...this.accessSettings.whitelist_users, this.accessSettings.newTrustedId];
       try {
         await this.apiFetch(`/api/permissions/whitelist/users?guildId=${gid}`, {
           method: 'POST',
-          body: JSON.stringify({ users: list }),
+          body: JSON.stringify({ userId }),
         });
         this.accessSettings.newTrustedId = '';
-        this.showToast('success', 'Пользователь добавлен в Whitelist');
+        this.showToast('success', `Пользователь ${userId} добавлен в Whitelist`);
         await this.loadPermissions();
       } catch (e) {
         this.showToast('error', e.message);
@@ -645,13 +650,50 @@ document.addEventListener('alpine:init', () => {
 
     async removeTrustedUser(userId) {
       const gid = this.getActiveGuildId() || this.guilds.main.id;
-      const list = this.accessSettings.whitelist_users.filter(id => id !== userId);
       try {
         await this.apiFetch(`/api/permissions/whitelist/users?guildId=${gid}`, {
-          method: 'POST',
-          body: JSON.stringify({ users: list }),
+          method: 'DELETE',
+          body: JSON.stringify({ userId }),
         });
-        this.showToast('success', 'Пользователь удален из Whitelist');
+        this.showToast('success', `Пользователь ${userId} удален из Whitelist`);
+        await this.loadPermissions();
+      } catch (e) {
+        this.showToast('error', e.message);
+      }
+    },
+
+    async addTrustedRole() {
+      const roleId = (this.accessSettings.newTrustedRoleId || '').trim();
+      if (!roleId) {
+        this.showToast('error', 'Выберите роль или введите ID роли');
+        return;
+      }
+      const gid = this.getActiveGuildId() || this.guilds.main.id;
+      const roleObj = this.getRoleById(roleId);
+      const roleName = roleObj?.name || roleId;
+      try {
+        await this.apiFetch(`/api/permissions/whitelist/roles?guildId=${gid}`, {
+          method: 'POST',
+          body: JSON.stringify({ roleId }),
+        });
+        this.accessSettings.newTrustedRoleId = '';
+        this.showToast('success', `Роль "${roleName}" добавлена в Whitelist`);
+        await this.loadPermissions();
+      } catch (e) {
+        this.showToast('error', e.message);
+      }
+    },
+
+    async removeTrustedRole(roleId) {
+      const gid = this.getActiveGuildId() || this.guilds.main.id;
+      const roleObj = this.getRoleById(roleId);
+      const roleName = roleObj?.name || roleId;
+      try {
+        await this.apiFetch(`/api/permissions/whitelist/roles?guildId=${gid}`, {
+          method: 'DELETE',
+          body: JSON.stringify({ roleId }),
+        });
+        this.showToast('success', `Роль "${roleName}" удалена из Whitelist`);
         await this.loadPermissions();
       } catch (e) {
         this.showToast('error', e.message);

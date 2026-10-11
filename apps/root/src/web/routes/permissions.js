@@ -15,9 +15,16 @@ router.get('/', canView, (req, res) => {
   const trustedRolesRaw = settingsRepo.get(gid, 'root', 'whitelist_roles') || '[]';
   const cmdPermsRaw     = settingsRepo.get(gid, 'root', 'command_permissions') || '{}';
 
+  const ownerIds = (process.env.OWNER_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+  const users = JSON.parse(trustedUsersRaw);
+  const roles = JSON.parse(trustedRolesRaw);
+
   res.json({
-    trustedUsers: JSON.parse(trustedUsersRaw),
-    trustedRoles: JSON.parse(trustedRolesRaw),
+    owner_ids: ownerIds,
+    whitelist_users: users,
+    whitelist_roles: roles,
+    trustedUsers: users,
+    trustedRoles: roles,
     commandPermissions: JSON.parse(cmdPermsRaw),
   });
 });
@@ -25,59 +32,81 @@ router.get('/', canView, (req, res) => {
 // Whitelist пользователей
 router.post('/whitelist/users', canEdit, (req, res) => {
   const gid = req.query.guildId || req.body.guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';
+
+  // Поддержка передачи массива { users: [...] }
+  if (Array.isArray(req.body.users)) {
+    const list = req.body.users.map(u => String(u).trim()).filter(Boolean);
+    settingsRepo.set(gid, 'root', 'whitelist_users', JSON.stringify(list));
+    recordAudit(req, `Обновлен Whitelist пользователей (${list.length} записей)`, 'permissions', { newValue: list });
+    return res.json({ ok: true, list, whitelist_users: list });
+  }
+
   const targetId = req.body.userId || req.body.targetId;
-  if (!targetId) return res.status(400).json({ error: 'userId обязателен' });
+  if (!targetId) return res.status(400).json({ error: 'Параметр userId обязателен' });
 
   const raw = settingsRepo.get(gid, 'root', 'whitelist_users') || '[]';
   const list = JSON.parse(raw);
-  if (!list.includes(targetId)) {
-    list.push(targetId);
+  const strId = String(targetId).trim();
+  if (!list.includes(strId)) {
+    list.push(strId);
     settingsRepo.set(gid, 'root', 'whitelist_users', JSON.stringify(list));
-    recordAudit(req, `Добавлен в Whitelist (пользователь): ${targetId}`, 'permissions');
+    recordAudit(req, `Добавлен в Whitelist (пользователь): ${strId}`, 'permissions');
   }
-  res.json({ ok: true, list });
+  res.json({ ok: true, list, whitelist_users: list });
 });
 
 router.delete('/whitelist/users', canEdit, (req, res) => {
   const gid = req.query.guildId || req.body.guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';
-  const targetId = req.body.userId || req.body.targetId;
-  if (!targetId) return res.status(400).json({ error: 'userId обязателен' });
+  const targetId = req.body.userId || req.body.targetId || req.query.userId || req.query.targetId;
+  if (!targetId) return res.status(400).json({ error: 'Параметр userId обязателен' });
 
   const raw = settingsRepo.get(gid, 'root', 'whitelist_users') || '[]';
   let list = JSON.parse(raw);
-  list = list.filter(id => id !== targetId);
+  const strId = String(targetId).trim();
+  list = list.filter(id => id !== strId);
   settingsRepo.set(gid, 'root', 'whitelist_users', JSON.stringify(list));
-  recordAudit(req, `Удален из Whitelist (пользователь): ${targetId}`, 'permissions');
-  res.json({ ok: true, list });
+  recordAudit(req, `Удален из Whitelist (пользователь): ${strId}`, 'permissions');
+  res.json({ ok: true, list, whitelist_users: list });
 });
 
 // Whitelist ролей
 router.post('/whitelist/roles', canEdit, (req, res) => {
   const gid = req.query.guildId || req.body.guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';
+
+  // Поддержка передачи массива { roles: [...] }
+  if (Array.isArray(req.body.roles)) {
+    const list = req.body.roles.map(r => String(r).trim()).filter(Boolean);
+    settingsRepo.set(gid, 'root', 'whitelist_roles', JSON.stringify(list));
+    recordAudit(req, `Обновлен Whitelist ролей (${list.length} записей)`, 'permissions', { newValue: list });
+    return res.json({ ok: true, list, whitelist_roles: list });
+  }
+
   const targetId = req.body.roleId || req.body.targetId;
-  if (!targetId) return res.status(400).json({ error: 'roleId обязателен' });
+  if (!targetId) return res.status(400).json({ error: 'Параметр roleId обязателен' });
 
   const raw = settingsRepo.get(gid, 'root', 'whitelist_roles') || '[]';
   const list = JSON.parse(raw);
-  if (!list.includes(targetId)) {
-    list.push(targetId);
+  const strId = String(targetId).trim();
+  if (!list.includes(strId)) {
+    list.push(strId);
     settingsRepo.set(gid, 'root', 'whitelist_roles', JSON.stringify(list));
-    recordAudit(req, `Добавлен в Whitelist (роль): ${targetId}`, 'permissions');
+    recordAudit(req, `Добавлен в Whitelist (роль): ${strId}`, 'permissions');
   }
-  res.json({ ok: true, list });
+  res.json({ ok: true, list, whitelist_roles: list });
 });
 
 router.delete('/whitelist/roles', canEdit, (req, res) => {
   const gid = req.query.guildId || req.body.guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';
-  const targetId = req.body.roleId || req.body.targetId;
-  if (!targetId) return res.status(400).json({ error: 'roleId обязателен' });
+  const targetId = req.body.roleId || req.body.targetId || req.query.roleId || req.query.targetId;
+  if (!targetId) return res.status(400).json({ error: 'Параметр roleId обязателен' });
 
   const raw = settingsRepo.get(gid, 'root', 'whitelist_roles') || '[]';
   let list = JSON.parse(raw);
-  list = list.filter(id => id !== targetId);
+  const strId = String(targetId).trim();
+  list = list.filter(id => id !== strId);
   settingsRepo.set(gid, 'root', 'whitelist_roles', JSON.stringify(list));
-  recordAudit(req, `Удален из Whitelist (роль): ${targetId}`, 'permissions');
-  res.json({ ok: true, list });
+  recordAudit(req, `Удален из Whitelist (роль): ${strId}`, 'permissions');
+  res.json({ ok: true, list, whitelist_roles: list });
 });
 
 // Универсальные эндпоинты
