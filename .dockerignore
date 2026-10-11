@@ -1,0 +1,12 @@
+node_modules/
+.git/
+.env
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/backups/
+data/logs/
+npm-debug.log*
+yarn-debug.log*
+.DS_Store
+Thumbs.db
