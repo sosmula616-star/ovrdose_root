@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Root Management Console</title>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="/css/style.css">
+  <!-- Alpine.js CDN -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.10/dist/cdn.min.js"></script>
+  <!-- Client Logic -->
+  <script src="/js/app.js"></script>
+</head>
+<body x-data="adminConsole()">
+
+  <div class="app-wrapper">
+    <!-- ЛЕВЫЙ САЙДБАР 248px -->
+    <aside class="sidebar" :class="{ 'mobile-open': sidebarOpen }">
+      <div class="sidebar-brand">
+        <a href="/" class="brand-logo">ROOT</a>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-group-label">Обзор</div>
+        <a class="nav-item" :class="{ 'active': activeTab === 'dashboard' }" @click="navigate('dashboard')">
+          <svg class="nav-icon" viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+          Дашборд
+        </a>
+
+        <div class="nav-group-label">Управление инфраструктурой</div>
+        <a class="nav-item" :class="{ 'active': activeTab === 'bots' }" @click="navigate('bots')">
+          <svg class="nav-icon" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/></svg>
+          Боты и сервисы
+        </a>
+        <a class="nav-item" :class="{ 'active': activeTab === 'rolesync' }" @click="navigate('rolesync')">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+          Синхронизация ролей
+        </a>
+        <a class="nav-item" :class="{ 'active': activeTab === 'permissions' }" @click="navigate('permissions')">
+          <svg class="nav-icon" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Роли и доступ
+        </a>
+
+        <div class="nav-group-label">Серверные модули</div>
+        <a class="nav-item" :class="{ 'active': activeTab === 'moderation' }" @click="navigate('moderation')">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Модерация (Guard)
+        </a>
+        <a class="nav-item" :class="{ 'active': activeTab === 'economy' }" @click="navigate('economy')">
+          <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Экономика
+        </a>
+        <a class="nav-item" :class="{ 'active': activeTab === 'anticrash' }" @click="navigate('anticrash')">
+          <svg class="nav-icon" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+          Антикраш и защита
+        </a>
+
+        <div class="nav-group-label">Система и аудит</div>
+        <a class="nav-item" :class="{ 'active': activeTab === 'logs' }" @click="navigate('logs')">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Журнал логов
+        </a>
+        <a class="nav-item" :class="{ 'active': activeTab === 'logchannels' }" @click="navigate('logchannels')">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Каналы логов
+        </a>
+        <a class="nav-item" :class="{ 'active': activeTab === 'backups' }" @click="navigate('backups')">
+          <svg class="nav-icon" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          Резервные копии
+        </a>
+        <a class="nav-item" :class="{ 'active': activeTab === 'settings' }" @click="navigate('settings')">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Админы панели
+        </a>
+      </nav>
+
+      <!-- Пользователь панели -->
+      <div class="sidebar-user" x-show="currentUser">
+        <img :src="currentUser?.avatar ? `https://cdn.discordapp.com/avatars/${currentUser.discord_id}/${currentUser.avatar}.png` : 'data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'28\' height=\'28\' viewBox=\'0 0 24 24\' fill=\'%238B93A1\'><circle cx=\'12\' cy=\'8\' r=\'4\'/><path d=\'M6 20v-2a6 6 0 0 1 12 0v2z\'/></svg>'" class="user-avatar" alt="Avatar">
+        <div class="user-details">
+          <div class="user-tag" x-text="currentUser?.discord_tag || 'Admin'"></div>
+          <div class="user-role-badge" x-text="currentUser?.role || 'Viewer'"></div>
+        </div>
+        <a href="/auth/logout" class="btn btn-ghost btn-sm" title="Выход">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </a>
+      </div>
+    </aside>
+
+    <!-- ОСНОВНАЯ ОБЛАСТЬ -->
+    <main class="main-wrapper">
+      <!-- ВЕРХНЯЯ ПОЛОСА 56px -->
+      <header class="header">
+        <div class="breadcrumbs">
+          <span>Root</span>
+          <span>/</span>
+          <span class="current" x-text="activeTab.toUpperCase()"></span>
+        </div>
+
+        <div class="header-actions">
+          <!-- Сегментированный переключатель серверов -->
+          <div class="segmented-control">
+            <button class="segmented-btn" :class="{ 'active': selectedGuild === 'both' }" @click="setGuildFilter('both')">Оба</button>
+            <button class="segmented-btn" :class="{ 'active': selectedGuild === 'staff' }" @click="setGuildFilter('staff')">Staff</button>
+            <button class="segmented-btn" :class="{ 'active': selectedGuild === 'main' }" @click="setGuildFilter('main')">Main</button>
+          </div>
+
+          <!-- Индикатор статуса Root -->
+          <div class="status-indicator">
+            <span class="status-dot"></span>
+            <span>Online</span>
+          </div>
+
+          <!-- Переключатель темы (светлая/тёмная) -->
+          <button class="btn btn-ghost btn-sm" @click="toggleTheme()" title="Сменить тему">
+            <svg class="nav-icon" x-show="theme === 'dark'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            <svg class="nav-icon" x-show="theme === 'light'" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- КОНТЕНТ СТРАНИЦ -->
+      <div class="content-container">
+
+        <!-- 1. ДАШБОРД -->
+        <section x-show="activeTab === 'dashboard'">
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Панель состояния</h1>
+              <p class="page-desc">Сводные показатели серверов, статус сервисов и последние события безопасности</p>
+            </div>
+            <button class="btn btn-secondary btn-sm" @click="loadDashboard()">
+              <svg class="nav-icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Обновить
+            </button>
+          </div>
+
+          <!-- Сетка из 4 карточек статистики -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">БОТЫ ОНЛАЙН</div>
+              <div class="stat-value"><span x-text="stats.botsOnline"></span> / <span x-text="stats.totalBots"></span></div>
+              <svg class="sparkline-svg" viewBox="0 0 100 25"><path d="M0,20 Q25,5 50,15 T100,8"/></svg>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">УЧАСТНИКОВ НА СЕРВЕРАХ</div>
+              <div class="stat-value" x-text="stats.totalMembers.toLocaleString()"></div>
+              <svg class="sparkline-svg" viewBox="0 0 100 25"><path d="M0,18 Q30,12 60,8 T100,4"/></svg>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">АКТИВНЫЕ НАКАЗАНИЯ</div>
+              <div class="stat-value" x-text="stats.activePunishments"></div>
+              <svg class="sparkline-svg" viewBox="0 0 100 25"><path d="M0,22 Q40,18 70,10 T100,12"/></svg>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">ИНЦИДЕНТЫ ЗА 24 ЧАСА</div>
+              <div class="stat-value" :class="{ 'color: var(--danger)': stats.incidents24h > 0 }" x-text="stats.incidents24h"></div>
+              <svg class="sparkline-svg" viewBox="0 0 100 25"><path d="M0,24 Q35,22 70,5 T100,20"/></svg>
+            </div>
+          </div>
+
+          <!-- Таблица ботов и лента событий в 2 колонки -->
+          <div class="grid-2col">
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">Состояние ботов</span>
+                <button class="btn btn-ghost btn-sm" @click="navigate('bots')">Все боты →</button>
+              </div>
+              <div class="table-responsive">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Бот</th>
+                      <th>Статус</th>
+                      <th>Ping</th>
+                      <th>RAM</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="bot in botsList" :key="bot.id">
+                      <tr @click="openBotDrawer(bot)" style="cursor: pointer;">
+                        <td style="font-weight: 500;" x-text="bot.name.toUpperCase()"></td>
+                        <td>
+                          <span class="badge" :class="bot.status === 'online' ? 'badge-success' : 'badge-danger'">
+                            <span class="badge-dot"></span>
+                            <span x-text="bot.status === 'online' ? 'Online' : 'Offline'"></span>
+                          </span>
+                        </td>
+                        <td class="mono" x-text="bot.status === 'online' ? (bot.ping_ms ? bot.ping_ms + 'ms' : '—') : '—'"></td>
+                        <td class="mono" x-text="bot.status === 'online' ? (bot.ram_usage_mb ? bot.ram_usage_mb + ' MB' : '—') : '—'"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">Последние события</span>
+                <button class="btn btn-ghost btn-sm" @click="navigate('logs')">Все логи →</button>
+              </div>
+              <div class="table-responsive">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Время</th>
+                      <th>Тип</th>
+                      <th>Сообщение</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="ev in recentEvents" :key="ev.id">
+                      <tr>
+                        <td class="mono" style="font-size: 11px; color: var(--text-muted);" x-text="formatDate(ev.created_at)"></td>
+                        <td>
+                          <span class="badge badge-neutral" x-text="ev.type"></span>
+                        </td>
+                        <td style="max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" x-text="ev.message"></td>
+                      </tr>
+                    </template>
+                    <tr x-show="recentEvents.length === 0">
+                      <td colspan="3" class="empty-state">Событий пока нет</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. БОТЫ И СЕРВИСЫ -->
+        <section x-show="activeTab === 'bots'">
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Реестр ботов и сервисов</h1>
+              <p class="page-desc">Централизованный мониторинг Guard, Root и внешних ботов через модуль Supervisor</p>
+            </div>
+            <button class="btn btn-primary btn-sm" @click="newBotModal.open = true">
+              <svg class="nav-icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Добавить бота
+            </button>
+          </div>
+
+          <div class="card">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Бот</th>
+                    <th>Тип</th>
+                    <th>Статус</th>
+                    <th>Ping</th>
+                    <th>Uptime</th>
+                    <th>RAM</th>
+                    <th>Серверы</th>
+                    <th>Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="bot in botsList" :key="bot.id">
+                    <tr>
+                      <td>
+                        <div style="font-weight: 600;" x-text="bot.name.toUpperCase()"></div>
+                        <div class="mono" style="font-size: 11px; color: var(--text-muted);" x-text="bot.client_id || 'ID не указан'"></div>
+                      </td>
+                      <td><span class="badge badge-neutral" x-text="bot.bot_type"></span></td>
+                      <td>
+                        <span class="badge" :class="bot.status === 'online' ? 'badge-success' : 'badge-danger'">
+                          <span class="badge-dot"></span>
+                          <span x-text="bot.status === 'online' ? 'Online' : 'Offline'"></span>
+                        </span>
+                      </td>
+                      <td class="mono" x-text="bot.ping_ms ? bot.ping_ms + 'ms' : '—'"></td>
+                      <td class="mono" x-text="formatUptime(bot.uptime_sec)"></td>
+                      <td class="mono" x-text="bot.ram_usage_mb ? bot.ram_usage_mb + ' MB' : '—'"></td>
+                      <td><span class="badge badge-neutral" x-text="bot.servers"></span></td>
+                      <td>
+                        <div style="display: flex; gap: 6px;">
+                          <button class="btn btn-secondary btn-sm" @click="openBotDrawer(bot)">Настройки</button>
+                          <button class="btn btn-ghost btn-sm" @click="restartBot(bot.name)" :disabled="bot.name === 'root'">Перезапуск</button>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. СИНХРОНИЗАЦИЯ РОЛЕЙ -->
+        <section x-show="activeTab === 'rolesync'">
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Синхронизация ролей</h1>
+              <p class="page-desc">Автоматическое дублирование ролей между Staff-сервером и Основным сервером</p>
+            </div>
+            <div style="display: flex; gap: 10px;">
+              <button class="btn btn-secondary btn-sm" @click="triggerFullResync()">
+                <svg class="nav-icon" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+                Полный ресинк
+              </button>
+              <button class="btn btn-primary btn-sm" @click="newRoleMapModal.open = true">Добавить связку</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><span class="card-title">Таблица маппинга ролей</span></div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Staff Сервер Роль</th>
+                    <th>Направление</th>
+                    <th>Main Сервер Роль</th>
+                    <th>Статус</th>
+                    <th>Заметки</th>
+                    <th>Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="map in roleMaps" :key="map.id">
+                    <tr>
+                      <td>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                          <span style="width: 8px; height: 8px; border-radius: 50%;" :style="`background-color: ${getRoleById(map.staff_role_id).color}`"></span>
+                          <span x-text="getRoleById(map.staff_role_id).name"></span>
+                          <span class="mono" style="font-size: 11px; color: var(--text-muted);" x-text="map.staff_role_id"></span>
+                        </div>
+                      </td>
+                      <td>
+                        <span class="badge badge-neutral" x-text="map.direction === 'staff_to_main' ? 'Staff → Main' : 'В обе стороны'"></span>
+                      </td>
+                      <td>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                          <span style="width: 8px; height: 8px; border-radius: 50%;" :style="`background-color: ${getRoleById(map.main_role_id).color}`"></span>
+                          <span x-text="getRoleById(map.main_role_id).name"></span>
+                          <span class="mono" style="font-size: 11px; color: var(--text-muted);" x-text="map.main_role_id"></span>
+                        </div>
+                      </td>
+                      <td>
+                        <label class="toggle-switch">
+                          <input type="checkbox" :checked="map.enabled === 1" @change="toggleRoleMap(map.id, map.enabled)">
+                          <span class="toggle-slider"></span>
+                        </label>
+                      </td>
+                      <td style="color: var(--text-muted);" x-text="map.notes || '—'"></td>
+                      <td>
+                        <button class="btn btn-danger btn-sm" @click="deleteRoleMap(map.id)">Удалить</button>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr x-show="roleMaps.length === 0">
+                    <td colspan="6" class="empty-state">Нет настроенных связок ролей</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Очередь отложенной синхронизации (Pending Sync) -->
+          <div class="card">
+            <div class="card-header"><span class="card-title">Отложенная синхронизация (Pending Queue)</span></div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>User ID</th>
+                    <th>Действие</th>
+                    <th>Роль</th>
+                    <th>Целевой сервер</th>
+                    <th>Попыток</th>
+                    <th>Создано</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="p in pendingSync" :key="p.id">
+                    <tr>
+                      <td class="mono" x-text="p.user_id"></td>
+                      <td><span class="badge" :class="p.action === 'add' ? 'badge-success' : 'badge-danger'" x-text="p.action"></span></td>
+                      <td class="mono" x-text="p.role_id"></td>
+                      <td class="mono" x-text="p.target_guild_id"></td>
+                      <td class="mono" x-text="p.attempts"></td>
+                      <td class="mono" style="font-size: 11px;" x-text="formatDate(p.created_at)"></td>
+                    </tr>
+                  </template>
+                  <tr x-show="pendingSync.length === 0">
+                    <td colspan="6" class="empty-state">Очередь отложенной синхронизации пуста</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. РОЛИ И ДОСТУП -->
+        <section x-show="activeTab === 'permissions'">
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Роли и уровни доступа</h1>
+              <p class="page-desc">Белые списки доверенных пользователей и администраторов для обхода антикраша</p>
+            </div>
+          </div>
+
+          <div class="grid-2col">
+            <div class="card">
+              <div class="card-header"><span class="card-title">Доверенные пользователи (Whitelist Users)</span></div>
+              <div class="card-body">
+                <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+                  <input type="text" class="form-input mono" placeholder="Discord ID пользователя..." x-model="accessSettings.newTrustedId">
+                  <button class="btn btn-primary" @click="addTrustedUser()">Добавить</button>
+                </div>
+                <div class="table-responsive">
+                  <table class="data-table">
+                    <thead><tr><th>Discord ID</th><th>Действие</th></tr></thead>
+                    <tbody>
+                      <template x-for="id in accessSettings.whitelist_users" :key="id">
+                        <tr>
+                          <td class="mono" x-text="id"></td>
+                          <td><button class="btn btn-danger btn-sm" @click="removeTrustedUser(id)">Удалить</button></td>
+                        </tr>
+                      </template>
+                      <tr x-show="accessSettings.whitelist_users.length === 0"><td colspan="2" class="empty-state">Список пуст</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header"><span class="card-title">Владельцы системы (OWNER_IDS)</span></div>
+              <div class="card-body">
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">Задаются в едином файле .env. Имеют абсолютный доступ к критическим операциям (восстановление БД, антикраш).</p>
+                <div class="form-input mono" style="display: flex; align-items: center;" x-text="accessSettings.root_owner_ids || 'Не настроены'"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5. МОДЕРАЦИЯ (GUARD) -->
+        <section x-show="activeTab === 'moderation'">
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Модерация (Данные Guard)</h1>
+              <p class="page-desc">Журнал кейсов, выдача наказаний и история нарушений участников</p>
+            </div>
+            <button class="btn btn-primary btn-sm" @click="newPunishModal.open = true">
+              <svg class="nav-icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Выдать наказание
+            </button>
+          </div>
+
+          <!-- Фильтры кейсов -->
+          <div class="card" style="padding: 16px; margin-bottom: 16px;">
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+              <input type="text" class="form-input" style="flex: 2; min-width: 200px;" placeholder="Поиск по User ID, причине или модератору..." x-model="modFilters.search" @input.debounce.300ms="loadModerationCases()">
+              <select class="form-select" style="flex: 1; min-width: 140px;" x-model="modFilters.type" @change="loadModerationCases()">
+                <option value="">Все типы</option>
+                <option value="warn">Предупреждение (Warn)</option>
+                <option value="mute_text">Текстовый мут</option>
+                <option value="mute_voice">Голосовой мут</option>
+                <option value="kick">Кик</option>
+                <option value="ban">Бан</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Таблица кейсов -->
+          <div class="card">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Кейс #</th>
+                    <th>Нарушитель ID</th>
+                    <th>Действие</th>
+                    <th>Причина</th>
+                    <th>Модератор</th>
+                    <th>Срок / Дата</th>
+                    <th>Статус</th>
+                    <th>Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="c in modCases.items" :key="c.id">
+                    <tr>
+                      <td class="mono" style="font-weight: 600;" x-text="`#${c.case_number}`"></td>
+                      <td>
+                        <a href="javascript:void(0)" class="mono" style="color: var(--accent); text-decoration: none;" @click="viewUserHistory(c.user_id)" x-text="c.user_id"></a>
+                      </td>
+                      <td>
+                        <span class="badge" :class="{
+                          'badge-warning': c.action === 'warn',
+                          'badge-info': c.action.startsWith('mute'),
+                          'badge-danger': c.action === 'ban' || c.action === 'kick'
+                        }" x-text="c.action.toUpperCase()"></span>
+                      </td>
+                      <td style="max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" x-text="c.reason"></td>
+                      <td class="mono" style="font-size: 12px; color: var(--text-muted);" x-text="c.moderator_id"></td>
+                      <td class="mono" style="font-size: 11px;" x-text="formatDate(c.created_at)"></td>
+                      <td>
+                        <span class="badge" :class="c.active ? 'badge-success' : 'badge-neutral'" x-text="c.active ? 'Active' : 'Closed'"></span>
+                      </td>
+                      <td>
+                        <button class="btn btn-ghost btn-sm" x-show="c.active" @click="revokePunishment(c.id, c.action)">Снять</button>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr x-show="modCases.items.length === 0"><td colspan="8" class="empty-state">Нарушений не найдено</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 6. ЭКОНОМИКА -->
+        <section x-show="activeTab === 'economy'">
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Экономическая система</h1>
+              <p class="page-desc">Единый кошелек по User ID для обоих серверов, аудит транзакций и магазин наград</p>
+            </div>
+            <button class="btn btn-primary btn-sm" x-show="ecoSettingsModified" @click="saveEconomySettings()">Сохранить настройки</button>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">ОБЩИЙ ОБЪЁМ ВАЛЮТЫ</div>
+              <div class="stat-value" x-text="ecoStats.totalBalance.toLocaleString()"></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">АКТИВНЫХ КОШЕЛЬКОВ</div>
+              <div class="stat-value" x-text="ecoStats.activeWallets.toLocaleString()"></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">ТРАНЗАКЦИЙ ПРОВЕДЕНО</div>
+              <div class="stat-value" x-text="ecoStats.transactionsCount.toLocaleString()"></div>
+            </div>
+          </div>
+
+          <!-- Топ-10 и Настройки -->
+          <div class="grid-2col">
+            <div class="card">
+              <div class="card-header"><span class="card-title">Таблица лидеров (Топ-10)</span></div>
+              <div class="table-responsive">
+                <table class="data-table">
+                  <thead><tr><th>#</th><th>User ID</th><th>Баланс</th><th>Действия</th></tr></thead>
+                  <tbody>
+                    <template x-for="(w, idx) in ecoLeaderboard" :key="w.user_id">
+                      <tr>
+                        <td class="mono" x-text="idx + 1"></td>
+                        <td class="mono" x-text="w.user_id"></td>
+                        <td class="mono" style="font-weight: 600;" x-text="w.balance.toLocaleString()"></td>
+                        <td><button class="btn btn-secondary btn-sm" @click="openWalletModal(w.user_id)">Изменить</button></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header"><span class="card-title">Параметры экономики</span></div>
+              <div class="card-body">
+                <div class="form-group">
+                  <label class="form-label">Символ валюты</label>
+                  <input type="text" class="form-input" x-model="ecoSettings.currency_symbol" @input="ecoSettingsModified = true">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Daily награда</label>
+                  <input type="number" class="form-input mono" x-model="ecoSettings.daily_amount" @input="ecoSettingsModified = true">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Work награда (мин/макс)</label>
+                  <div style="display: flex; gap: 8px;">
+                    <input type="number" class="form-input mono" x-model="ecoSettings.work_min" @input="ecoSettingsModified = true">
+                    <input type="number" class="form-input mono" x-model="ecoSettings.work_max" @input="ecoSettingsModified = true">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Комиссия перевода (%)</label>
+                  <input type="number" class="form-input mono" x-model="ecoSettings.transfer_tax_percent" @input="ecoSettingsModified = true">
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 7. АНТИКРАШ И ЗАЩИТА -->
+        <section x-show="activeTab === 'anticrash'">
+          <!-- Полоса Lockdown если включен -->
+          <div class="lockdown-banner" x-show="lockdownStatus">
+            <span>ВНИМАНИЕ: АКТИВЕН РЕЖИМ БЛОКИРОВКИ СЕРВЕРА (LOCKDOWN). ПРАВА НА ОТПРАВКУ СООБЩЕНИЙ ПЕРЕКРЫТЫ.</span>
+            <button class="btn btn-secondary btn-sm" @click="toggleLockdown()">Снять Lockdown</button>
+          </div>
+
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Антикраш и защита структуры</h1>
+              <p class="page-desc">Скользящие окна лимитов опасных действий, автоматический откат и снапшоты серверов</p>
+            </div>
+            <div style="display: flex; gap: 10px;">
+              <button class="btn btn-sm" :class="lockdownStatus ? 'btn-secondary' : 'btn-danger'" @click="toggleLockdown()" x-text="lockdownStatus ? 'Отключить Lockdown' : 'Включить Lockdown'"></button>
+              <button class="btn btn-secondary btn-sm" @click="createSnapshot()">Создать снапшот</button>
+              <button class="btn btn-primary btn-sm" x-show="anticrashModified" @click="saveAnticrashRules()">Сохранить изменения</button>
+            </div>
+          </div>
+
+          <!-- Таблица правил лимитов -->
+          <div class="card">
+            <div class="card-header"><span class="card-title">Лимиты в скользящем окне</span></div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Тип события</th>
+                    <th>Лимит действий</th>
+                    <th>Окно (сек)</th>
+                    <th>Действие при превышении</th>
+                    <th>Вкл/Выкл</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="r in anticrashRules" :key="r.event_type">
+                    <tr>
+                      <td style="font-weight: 500;" x-text="r.event_type"></td>
+                      <td style="width: 120px;">
+                        <input type="number" class="form-input mono" x-model="r.limit_count" @input="anticrashModified = true">
+                      </td>
+                      <td style="width: 120px;">
+                        <input type="number" class="form-input mono" x-model="r.window_seconds" @input="anticrashModified = true">
+                      </td>
+                      <td style="width: 180px;">
+                        <select class="form-select" x-model="r.action" @change="anticrashModified = true">
+                          <option value="strip_roles">Снять роли</option>
+                          <option value="kick">Кик</option>
+                          <option value="ban">Бан</option>
+                          <option value="quarantine">Карантин</option>
+                          <option value="alert_only">Только алерт</option>
+                        </select>
+                      </td>
+                      <td>
+                        <label class="toggle-switch">
+                          <input type="checkbox" :checked="r.enabled === 1" @change="r.enabled = r.enabled ? 0 : 1; anticrashModified = true">
+                          <span class="toggle-slider"></span>
+                        </label>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Снапшоты структуры -->
+          <div class="card">
+            <div class="card-header"><span class="card-title">Снапшоты структуры (Каналы и Роли)</span></div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead><tr><th>ID</th><th>Причина</th><th>Каналов</th><th>Ролей</th><th>Дата</th><th>Действие</th></tr></thead>
+                <tbody>
+                  <template x-for="s in snapshots" :key="s.id">
+                    <tr>
+                      <td class="mono" x-text="s.id"></td>
+                      <td x-text="s.reason"></td>
+                      <td class="mono" x-text="s.channel_count"></td>
+                      <td class="mono" x-text="s.role_count"></td>
+                      <td class="mono" style="font-size: 11px;" x-text="formatDate(s.created_at)"></td>
+                      <td><button class="btn btn-danger btn-sm" @click="restoreSnapshot(s.id)">Откатить</button></td>
+                    </tr>
+                  </template>
+                  <tr x-show="snapshots.length === 0"><td colspan="6" class="empty-state">Снапшотов пока нет</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 8. ЖУРНАЛ ЛОГОВ -->
+        <section x-show="activeTab === 'logs'">
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Журнал логов и ошибки</h1>
+              <p class="page-desc">Все события, регистрируемые ботами в SQLite, с экспортом и фильтрацией</p>
+            </div>
+            <a href="/api/logs/export/csv" class="btn btn-secondary btn-sm" target="_blank">
+              <svg class="nav-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Экспорт в CSV
+            </a>
+          </div>
+
+          <!-- Фильтры -->
+          <div class="card" style="padding: 16px; margin-bottom: 16px;">
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+              <select class="form-select" style="flex: 1;" x-model="logFilters.bot" @change="loadLogs()">
+                <option value="">Все боты</option>
+                <option value="root">Root</option>
+                <option value="guard">Guard</option>
+              </select>
+              <select class="form-select" style="flex: 1;" x-model="logFilters.type" @change="loadLogs()">
+                <option value="">Все типы</option>
+                <option value="security">Безопасность</option>
+                <option value="economy">Экономика</option>
+                <option value="sync">Синхронизация</option>
+                <option value="bots">Боты</option>
+              </select>
+              <select class="form-select" style="flex: 1;" x-model="logFilters.level" @change="loadLogs()">
+                <option value="">Все уровни</option>
+                <option value="info">Info</option>
+                <option value="warn">Warn</option>
+                <option value="error">Error</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Время</th>
+                    <th>Бот</th>
+                    <th>Уровень</th>
+                    <th>Тип</th>
+                    <th>Сообщение</th>
+                    <th>User ID</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="l in logsData.items" :key="l.id">
+                    <tr>
+                      <td class="mono" style="font-size: 11px; color: var(--text-muted);" x-text="formatDate(l.created_at)"></td>
+                      <td style="font-weight: 500;" x-text="l.bot.toUpperCase()"></td>
+                      <td>
+                        <span class="badge" :class="{
+                          'badge-success': l.level === 'info',
+                          'badge-warning': l.level === 'warn',
+                          'badge-danger': l.level === 'error'
+                        }" x-text="l.level.toUpperCase()"></span>
+                      </td>
+                      <td><span class="badge badge-neutral" x-text="l.type"></span></td>
+                      <td x-text="l.message"></td>
+                      <td class="mono" style="font-size: 11px;" x-text="l.user_id || '—'"></td>
+                    </tr>
+                  </template>
+                  <tr x-show="logsData.items.length === 0"><td colspan="6" class="empty-state">Логов не найдено</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 9. КАНАЛЫ ЛОГОВ -->
+        <section x-show="activeTab === 'logchannels'">
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Привязка каналов логов</h1>
+              <p class="page-desc">Настройка каналов Discord для отправки Embed-сообщений по категориям</p>
+            </div>
+            <button class="btn btn-primary btn-sm" @click="saveLogChannels()">Сохранить каналы</button>
+          </div>
+
+          <div class="card" style="max-width: 640px;">
+            <div class="card-body">
+              <div class="form-group">
+                <label class="form-label">Общий лог-канал (General)</label>
+                <select class="form-select" x-model="logChannels.general">
+                  <option value="">Не привязан</option>
+                  <template x-for="c in (selectedGuild === 'staff' ? discordChannels.staff : discordChannels.main)" :key="c.id">
+                    <option :value="c.id" x-text="`# ${c.name}`"></option>
+                  </template>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Лог безопасности и антикраша (Security)</label>
+                <select class="form-select" x-model="logChannels.security">
+                  <option value="">Не привязан</option>
+                  <template x-for="c in (selectedGuild === 'staff' ? discordChannels.staff : discordChannels.main)" :key="c.id">
+                    <option :value="c.id" x-text="`# ${c.name}`"></option>
+                  </template>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Лог экономики (Economy)</label>
+                <select class="form-select" x-model="logChannels.economy">
+                  <option value="">Не привязан</option>
+                  <template x-for="c in (selectedGuild === 'staff' ? discordChannels.staff : discordChannels.main)" :key="c.id">
+                    <option :value="c.id" x-text="`# ${c.name}`"></option>
+                  </template>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Лог синхронизации ролей (Sync)</label>
+                <select class="form-select" x-model="logChannels.sync">
+                  <option value="">Не привязан</option>
+                  <template x-for="c in (selectedGuild === 'staff' ? discordChannels.staff : discordChannels.main)" :key="c.id">
+                    <option :value="c.id" x-text="`# ${c.name}`"></option>
+                  </template>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Лог супервизора ботов (Bots)</label>
+                <select class="form-select" x-model="logChannels.bots">
+                  <option value="">Не привязан</option>
+                  <template x-for="c in (selectedGuild === 'staff' ? discordChannels.staff : discordChannels.main)" :key="c.id">
+                    <option :value="c.id" x-text="`# ${c.name}`"></option>
+                  </template>
+                </select>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 10. РЕЗЕРВНЫЕ КОПИИ -->
+        <section x-show="activeTab === 'backups'">
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Резервные копии базы данных</h1>
+              <p class="page-desc">Автоматические снимки SQLite WAL с ротацией и безопасным восстановлением</p>
+            </div>
+            <button class="btn btn-primary btn-sm" @click="createBackup()">Создать копию</button>
+          </div>
+
+          <div class="card">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Файл бэкапа</th>
+                    <th>Размер</th>
+                    <th>Создан</th>
+                    <th>Заметки</th>
+                    <th>Дата</th>
+                    <th>Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="b in backupsList" :key="b.id">
+                    <tr>
+                      <td class="mono" style="font-weight: 500;" x-text="b.filename"></td>
+                      <td class="mono" x-text="formatBytes(b.size_bytes)"></td>
+                      <td x-text="b.created_by"></td>
+                      <td style="color: var(--text-muted);" x-text="b.notes"></td>
+                      <td class="mono" style="font-size: 11px;" x-text="formatDate(b.created_at)"></td>
+                      <td>
+                        <div style="display: flex; gap: 6px;">
+                          <a :href="`/api/backups/${b.filename}/download`" class="btn btn-secondary btn-sm">Скачать</a>
+                          <button class="btn btn-danger btn-sm" @click="restoreBackup(b.filename)">Восстановить</button>
+                          <button class="btn btn-ghost btn-sm" @click="deleteBackup(b.filename)">Удалить</button>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr x-show="backupsList.length === 0"><td colspan="6" class="empty-state">Бэкапов пока нет</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 11. АДМИНИСТРАТОРЫ ПАНЕЛИ -->
+        <section x-show="activeTab === 'settings'">
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Администраторы панели и аудит</h1>
+              <p class="page-desc">Управление доступом к веб-интерфейсу и журнал действий администраторов</p>
+            </div>
+            <button class="btn btn-primary btn-sm" @click="newAdminModal.open = true">Добавить админа</button>
+          </div>
+
+          <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header"><span class="card-title">Список администраторов</span></div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead><tr><th>Пользователь</th><th>Discord ID</th><th>Роль</th><th>Последний вход</th><th>Действия</th></tr></thead>
+                <tbody>
+                  <template x-for="u in panelUsersList" :key="u.discord_id">
+                    <tr>
+                      <td style="font-weight: 600;" x-text="u.discord_tag"></td>
+                      <td class="mono" x-text="u.discord_id"></td>
+                      <td><span class="badge badge-neutral" style="text-transform: uppercase;" x-text="u.role"></span></td>
+                      <td class="mono" style="font-size: 11px; color: var(--text-muted);" x-text="formatDate(u.last_login)"></td>
+                      <td><button class="btn btn-danger btn-sm" @click="deletePanelAdmin(u.discord_id)">Отозвать</button></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><span class="card-title">Журнал аудита действий в панели</span></div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead><tr><th>Время</th><th>Админ</th><th>Действие</th><th>Раздел</th><th>IP</th></tr></thead>
+                <tbody>
+                  <template x-for="a in auditLogs.items" :key="a.id">
+                    <tr>
+                      <td class="mono" style="font-size: 11px; color: var(--text-muted);" x-text="formatDate(a.created_at)"></td>
+                      <td class="mono" x-text="a.admin_tag"></td>
+                      <td style="font-weight: 500;" x-text="a.action"></td>
+                      <td><span class="badge badge-neutral" x-text="a.section"></span></td>
+                      <td class="mono" style="font-size: 11px;" x-text="a.ip_address"></td>
+                    </tr>
+                  </template>
+                  <tr x-show="auditLogs.items?.length === 0"><td colspan="5" class="empty-state">Записей аудита нет</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- ВЫЕЗЖАЮЩИЙ DRAWER СПРАВА ДЛЯ БОТА -->
+  <div class="drawer-backdrop" x-show="botDrawer.open" @click.self="botDrawer.open = false" style="display: none;">
+    <div class="drawer">
+      <div class="drawer-header">
+        <div>
+          <span style="font-size: 16px; font-weight: 600;" x-text="botDrawer.bot?.name.toUpperCase()"></span>
+          <span class="badge" style="margin-left: 8px;" :class="botDrawer.bot?.status === 'online' ? 'badge-success' : 'badge-danger'" x-text="botDrawer.bot?.status"></span>
+        </div>
+        <button class="btn btn-ghost btn-sm" @click="botDrawer.open = false">✕</button>
+      </div>
+
+      <div class="drawer-body">
+        <div class="tabs-bar">
+          <button class="tab-btn" :class="{ 'active': botDrawer.tab === 'general' }" @click="botDrawer.tab = 'general'">Общее</button>
+          <button class="tab-btn" :class="{ 'active': botDrawer.tab === 'modules' }" @click="botDrawer.tab = 'modules'">Модули</button>
+          <button class="tab-btn" x-show="botDrawer.bot?.name === 'guard'" :class="{ 'active': botDrawer.tab === 'guard' }" @click="botDrawer.tab = 'guard'">Настройки Guard</button>
+          <button class="tab-btn" :class="{ 'active': botDrawer.tab === 'logs' }" @click="botDrawer.tab = 'logs'">Журнал</button>
+        </div>
+
+        <!-- Вкладка Общее -->
+        <div x-show="botDrawer.tab === 'general'">
+          <div class="form-group">
+            <label class="form-label">Client ID</label>
+            <div class="form-input mono" style="display: flex; align-items: center;" x-text="botDrawer.bot?.client_id || 'Не указан'"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Тип бота</label>
+            <div class="form-input" style="display: flex; align-items: center;" x-text="botDrawer.bot?.bot_type"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Разрешенные серверы</label>
+            <div class="form-input" style="display: flex; align-items: center;" x-text="botDrawer.bot?.servers"></div>
+          </div>
+        </div>
+
+        <!-- Вкладка Модули -->
+        <div x-show="botDrawer.tab === 'modules'">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead><tr><th>Модуль</th><th>Статус</th><th>Переключение</th></tr></thead>
+              <tbody>
+                <template x-for="(enabled, mName) in (botDrawer.bot?.modules || {})" :key="mName">
+                  <tr>
+                    <td style="font-weight: 500;" x-text="mName"></td>
+                    <td><span class="badge" :class="enabled ? 'badge-success' : 'badge-neutral'" x-text="enabled ? 'Включен' : 'Отключен'"></span></td>
+                    <td>
+                      <label class="toggle-switch">
+                        <input type="checkbox" :checked="enabled" @change="toggleModule(botDrawer.bot?.name, mName, enabled)">
+                        <span class="toggle-slider"></span>
+                      </label>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Вкладка Guard -->
+        <div x-show="botDrawer.tab === 'guard'">
+          <div class="form-group">
+            <label class="form-label">Автомодерация (Automod)</label>
+            <label class="toggle-switch">
+              <input type="checkbox" x-model="botDrawer.guardSettings.automod_enabled">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Лимит варнов до мута</label>
+            <input type="number" class="form-input mono" x-model="botDrawer.guardSettings.warn_mute_threshold">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Лимит варнов до бана</label>
+            <input type="number" class="form-input mono" x-model="botDrawer.guardSettings.warn_ban_threshold">
+          </div>
+          <button class="btn btn-primary" style="margin-top: 16px;" @click="saveGuardSettings()">Сохранить настройки Guard</button>
+        </div>
+
+        <!-- Вкладка Журнал -->
+        <div x-show="botDrawer.tab === 'logs'">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead><tr><th>Время</th><th>Действие</th><th>Цель</th></tr></thead>
+              <tbody>
+                <template x-for="log in botDrawer.actionLogs" :key="log.id">
+                  <tr>
+                    <td class="mono" style="font-size: 11px;" x-text="formatDate(log.created_at)"></td>
+                    <td x-text="log.action_type"></td>
+                    <td class="mono" x-text="log.target_id"></td>
+                  </tr>
+                </template>
+                <tr x-show="botDrawer.actionLogs.length === 0"><td colspan="3" class="empty-state">Действий не зафиксировано</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ ДЕЙСТВИЯ -->
+  <div class="modal-backdrop" x-show="confirmModal.open" style="display: none;">
+    <div class="modal">
+      <div class="modal-header" x-text="confirmModal.title"></div>
+      <div class="modal-body">
+        <p x-text="confirmModal.message"></p>
+        <div x-show="confirmModal.requireInput" style="margin-top: 14px;">
+          <input type="text" class="form-input mono" placeholder="Введите подтверждающее слово..." x-model="confirmModal.inputValue">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="confirmModal.open = false">Отмена</button>
+        <button class="btn" :class="confirmModal.confirmBtnClass" @click="executeConfirm()" x-text="confirmModal.confirmBtnText"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ БОТА -->
+  <div class="modal-backdrop" x-show="newBotModal.open" style="display: none;">
+    <div class="modal">
+      <div class="modal-header">Добавление внешнего бота</div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Имя бота (напр. guard, music)</label>
+          <input type="text" class="form-input" x-model="newBotModal.name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Discord Client ID</label>
+          <input type="text" class="form-input mono" x-model="newBotModal.clientId">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Имя процесса в PM2</label>
+          <input type="text" class="form-input mono" placeholder="root-core-guard" x-model="newBotModal.pm2Name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Серверы</label>
+          <select class="form-select" x-model="newBotModal.servers">
+            <option value="both">Оба сервера</option>
+            <option value="staff">Только Staff</option>
+            <option value="main">Только Main</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="newBotModal.open = false">Отмена</button>
+        <button class="btn btn-primary" @click="createBot()">Добавить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО СВЯЗКИ РОЛЕЙ -->
+  <div class="modal-backdrop" x-show="newRoleMapModal.open" style="display: none;">
+    <div class="modal">
+      <div class="modal-header">Новая связка ролей</div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Роль на Staff-сервере</label>
+          <select class="form-select" x-model="newRoleMapModal.staffRoleId">
+            <option value="">Выберите роль Staff</option>
+            <template x-for="r in discordRoles.staff" :key="r.id">
+              <option :value="r.id" x-text="`${r.name} (${r.id})`"></option>
+            </template>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Направление</label>
+          <select class="form-select" x-model="newRoleMapModal.direction">
+            <option value="staff_to_main">Staff → Main (по умолчанию)</option>
+            <option value="both">В обе стороны (двунаправленная)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Роль на Main-сервере</label>
+          <select class="form-select" x-model="newRoleMapModal.mainRoleId">
+            <option value="">Выберите роль Main</option>
+            <template x-for="r in discordRoles.main" :key="r.id">
+              <option :value="r.id" x-text="`${r.name} (${r.id})`"></option>
+            </template>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="newRoleMapModal.open = false">Отмена</button>
+        <button class="btn btn-primary" @click="createRoleMap()">Создать связку</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ТОСТЫ УВЕДОМЛЕНИЙ В ПРАВОМ ВЕРХНЕМ УГЛУ -->
+  <div class="toasts-container">
+    <template x-for="toast in toasts" :key="toast.id">
+      <div class="toast" :class="`toast-${toast.type}`">
+        <span x-text="toast.message"></span>
+        <button class="btn btn-ghost btn-sm" @click="toasts = toasts.filter(t => t.id !== toast.id)">✕</button>
+      </div>
+    </template>
+  </div>
+
+</body>
+</html>

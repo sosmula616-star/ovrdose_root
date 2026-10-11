@@ -1,0 +1,23 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Секреты и окружение
+.env
+.env.local
+.env.*.local
+
+# База данных и локальные данные
+/data/*.db
+/data/*.db-wal
+/data/*.db-shm
+/data/backups/
+/data/ipc.json
+
+# Логи и временные файлы
+logs/
+*.log
+.DS_Store
+Thumbs.db

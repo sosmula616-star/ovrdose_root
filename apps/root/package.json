@@ -1,0 +1,21 @@
+{
+  "name": "@root-core/root",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "dependencies": {
+    "@root-core/db": "*",
+    "@root-core/shared": "*",
+    "@root-core/bot-client": "*",
+    "discord.js": "^14.15.3",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "better-sqlite3-session-store": "^0.1.0",
+    "connect-sqlite3": "^0.9.13",
+    "csurf": "^1.11.0",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.3.1",
+    "node-fetch": "^2.7.0",
+    "archiver": "^7.0.1",
+    "dotenv": "^16.4.5"
+  }
+}
