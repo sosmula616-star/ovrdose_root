@@ -32,6 +32,9 @@ const { loadUser, requireAuth } = require('./middleware/auth');
 function createWebServer(client, logger) {
   const app = express();
 
+  // Доверяем обратному прокси Bothost (Nginx/Cloudflare) для передачи HTTPS заголовков
+  app.set('trust proxy', 1);
+
   // Сохраняем ссылку на Discord клиент и SSE в app.locals
   app.locals.client = client;
   app.locals.logger = logger;
@@ -98,7 +101,7 @@ function createWebServer(client, logger) {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: 'auto',
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 дней
     },
