@@ -52,6 +52,11 @@ function createWebServer(client, logger) {
           "'unsafe-eval'", // необходимо для выражений Alpine.js
           'https://cdn.jsdelivr.net',
           'https://unpkg.com',
+          'https://challenges.cloudflare.com',
+        ],
+        frameSrc: [
+          "'self'",
+          'https://challenges.cloudflare.com',
         ],
         styleSrc: [
           "'self'",
@@ -69,11 +74,16 @@ function createWebServer(client, logger) {
         ],
         connectSrc: [
           "'self'",
+          'https://challenges.cloudflare.com',
         ],
       },
     },
     crossOriginEmbedderPolicy: false,
   }));
+
+  // Защита от автоматизированных ботов и сканеров Cloudflare
+  const { cloudflareSecurity } = require('./middleware/cloudflare');
+  app.use(cloudflareSecurity);
 
   // 2. Лимитер запросов (защита от брутфорса)
   const apiLimiter = rateLimit({
