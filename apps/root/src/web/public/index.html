@@ -817,6 +817,82 @@
             </div>
           </div>
 
+          <!-- ПЕРСОНАЛЬНЫЕ ЛИМИТЫ ПО РОЛЯМ -->
+          <div class="card" style="margin-top: 20px;">
+            <div class="card-header" style="flex-wrap: wrap; gap: 12px;">
+              <div>
+                <span class="card-title" style="display: flex; align-items: center; gap: 8px;">
+                  <span style="color: var(--gold);">🎭</span>
+                  Персональные лимиты и разрешения по ролям
+                </span>
+                <p style="font-size: 12px; color: var(--text-muted); margin: 4px 0 0 0;">
+                  Гибкая настройка для каждой роли: что разрешено делать, что строго запрещено, персональные лимиты и индивидуальные наказания
+                </p>
+              </div>
+              <button class="btn btn-primary btn-sm" @click="openAddRoleRuleModal()">
+                <svg class="nav-icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Настроить роль
+              </button>
+            </div>
+
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Роль</th>
+                    <th>Разрешенные действия</th>
+                    <th>Строго запрещенные действия</th>
+                    <th>Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="r in anticrashRoleRules" :key="r.role_id">
+                    <tr>
+                      <td style="min-width: 180px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                          <span style="width: 10px; height: 10px; border-radius: 50%;" :style="`background: ${getRoleById(r.role_id).color || '#8B93A1'}`"></span>
+                          <div>
+                            <div style="font-weight: 600;" x-text="r.role_name || getRoleById(r.role_id).name || r.role_id"></div>
+                            <div class="mono" style="font-size: 11px; color: var(--text-muted);" x-text="r.role_id"></div>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 380px;">
+                          <template x-for="act in anticrashActionTypes" :key="act.key">
+                            <span class="badge badge-success" style="font-size: 11px;" x-show="r.permissions && r.permissions[act.key] && r.permissions[act.key].allowed !== false">
+                              <span x-text="`${act.name}: ${r.permissions[act.key].limit}/${r.permissions[act.key].window}с`"></span>
+                            </span>
+                          </template>
+                        </div>
+                      </td>
+                      <td>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 320px;">
+                          <template x-for="act in anticrashActionTypes" :key="act.key">
+                            <span class="badge badge-danger" style="font-size: 11px;" x-show="r.permissions && r.permissions[act.key] && r.permissions[act.key].allowed === false">
+                              <span x-text="`${act.name} [${r.permissions[act.key].action || 'ban'}]`"></span>
+                            </span>
+                          </template>
+                        </div>
+                      </td>
+                      <td>
+                        <div style="display: flex; gap: 6px;">
+                          <button class="btn btn-secondary btn-sm" @click="openEditRoleRuleModal(r)">Настроить</button>
+                          <button class="btn btn-ghost btn-sm" @click="deleteRoleRule(r.role_id, r.role_name)">Сбросить</button>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr x-show="anticrashRoleRules.length === 0">
+                    <td colspan="4" class="empty-state">
+                      Персональные правила для ролей пока не настроены. Для всех ролей действуют глобальные лимиты. Нажмите «Настроить роль», чтобы задать индивидуальные права.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <!-- Снапшоты структуры -->
           <div class="card">
             <div class="card-header"><span class="card-title">Снапшоты структуры (Каналы и Роли)</span></div>
@@ -1369,9 +1445,95 @@
           </label>
         </div>
       </div>
-      <div class="modal-footer">
         <button class="btn btn-secondary" @click="editChannelModal.open = false">Отмена</button>
-        <button class="btn btn-primary" @click="saveEditChannel()">Сохранить изменения</button>
+        <button class="btn btn-primary" @click="saveEditChannel()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО НАСТРОЙКИ ПРАВ И ЛИМИТОВ РОЛИ (АНТИКРАШ) -->
+  <div class="modal-backdrop" x-show="roleRuleModal.open" style="display: none;">
+    <div class="modal" style="max-width: 780px; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header">
+        <div>
+          <div style="font-size: 16px; font-weight: 600;" x-text="roleRuleModal.isEdit ? `Настройка роли: ${roleRuleModal.roleName}` : 'Настройка правил антикраша для роли'"></div>
+          <div style="font-size: 12px; color: var(--text-muted); font-weight: normal; margin-top: 3px;">
+            Укажите, что участникам с этой ролью разрешено выполнять на сервере, лимиты действий в секундах и наказание при нарушениях
+          </div>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" x-show="!roleRuleModal.isEdit">
+          <label class="form-label">Выберите роль сервера</label>
+          <select class="form-select" x-model="roleRuleModal.roleId">
+            <option value="">-- Выберите роль --</option>
+            <template x-for="r in (selectedGuild === 'staff' ? discordRoles.staff : discordRoles.main)" :key="r.id">
+              <option :value="r.id" x-text="`${r.name} (${r.id})`"></option>
+            </template>
+          </select>
+        </div>
+
+        <div style="margin-top: 16px;">
+          <label class="form-label" style="margin-bottom: 8px;">Действия, лимиты и ограничения:</label>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <template x-for="act in anticrashActionTypes" :key="act.key">
+              <div class="card" style="padding: 12px 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color);">
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 10px;">
+                  <div>
+                    <span style="font-weight: 600; font-size: 14px;" x-text="act.name"></span>
+                    <span style="font-size: 12px; color: var(--text-muted); margin-left: 6px;" x-text="`(${act.desc})`"></span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 12px; font-weight: 500;" :style="roleRuleModal.permissions[act.key]?.allowed ? 'color: #4EAC6D;' : 'color: #C9545D;'" x-text="roleRuleModal.permissions[act.key]?.allowed ? 'РАЗРЕШЕНО' : 'СТРОГО ЗАПРЕЩЕНО'"></span>
+                    <label class="toggle-switch">
+                      <input type="checkbox" :checked="roleRuleModal.permissions[act.key]?.allowed" @change="roleRuleModal.permissions[act.key].allowed = !roleRuleModal.permissions[act.key].allowed">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Настройки параметров если разрешено -->
+                <div x-show="roleRuleModal.permissions[act.key]?.allowed" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; background: rgba(0,0,0,0.2); padding: 8px 10px; border-radius: 6px;">
+                  <div style="flex: 1; min-width: 100px;">
+                    <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 3px;">Лимит действий</label>
+                    <input type="number" class="form-input mono" style="padding: 4px 8px; font-size: 12px;" x-model.number="roleRuleModal.permissions[act.key].limit" min="1" max="100">
+                  </div>
+                  <div style="flex: 1; min-width: 100px;">
+                    <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 3px;">Период (сек)</label>
+                    <input type="number" class="form-input mono" style="padding: 4px 8px; font-size: 12px;" x-model.number="roleRuleModal.permissions[act.key].window" min="1" max="3600">
+                  </div>
+                  <div style="flex: 1.5; min-width: 140px;">
+                    <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 3px;">При превышении лимита</label>
+                    <select class="form-select" style="padding: 4px 8px; font-size: 12px;" x-model="roleRuleModal.permissions[act.key].action">
+                      <option value="quarantine">Карантин / Таймаут</option>
+                      <option value="remove_roles">Снять все роли</option>
+                      <option value="kick">Кикнуть с сервера</option>
+                      <option value="ban">Забанить навсегда</option>
+                      <option value="alert">Только уведомить</option>
+                      <option value="restore">Откат снапшота</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Настройки параметров если запрещено -->
+                <div x-show="!roleRuleModal.permissions[act.key]?.allowed" style="display: flex; gap: 12px; align-items: center; background: rgba(201,84,93,0.08); padding: 8px 10px; border-radius: 6px;">
+                  <span style="font-size: 12px; color: #C9545D;">При любой попытке совершить действие:</span>
+                  <select class="form-select" style="padding: 4px 8px; font-size: 12px; max-width: 220px;" x-model="roleRuleModal.permissions[act.key].action">
+                    <option value="ban">Мгновенный бан</option>
+                    <option value="kick">Мгновенный кик</option>
+                    <option value="quarantine">Таймаут (Карантин)</option>
+                    <option value="remove_roles">Снять опасные роли</option>
+                    <option value="alert">Только алерт в аудит</option>
+                  </select>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="roleRuleModal.open = false">Отмена</button>
+        <button class="btn btn-primary" @click="saveRoleRule()">Сохранить правила роли</button>
       </div>
     </div>
   </div>

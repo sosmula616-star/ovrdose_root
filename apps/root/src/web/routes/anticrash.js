@@ -55,6 +55,35 @@ const handleSaveRules = (req, res) => {
 router.post('/rules', canEdit, handleSaveRules);
 router.put('/rules', canEdit, handleSaveRules);
 
+// --- Персональные лимиты и разрешения по ролям ---
+router.get('/role-rules', canView, (req, res) => {
+  const gid = req.query.guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';
+  const list = antinukeRepo.getRoleRules(gid);
+  res.json(list || []);
+});
+
+router.post('/role-rules', canEdit, (req, res) => {
+  const { guildId, roleId, roleName, permissions } = req.body;
+  const gid = guildId || req.query.guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';
+
+  if (!roleId) {
+    return res.status(400).json({ error: 'Параметр roleId обязателен' });
+  }
+
+  antinukeRepo.setRoleRule(gid, roleId, roleName || roleId, permissions || {});
+  recordAudit(req, `Обновлены персональные правила антикраша для роли ${roleName || roleId}`, 'anticrash', { newValue: req.body });
+  res.json({ ok: true, message: 'Правила для роли сохранены' });
+});
+
+router.delete('/role-rules/:roleId', canEdit, (req, res) => {
+  const { roleId } = req.params;
+  const gid = req.query.guildId || req.body.guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';
+
+  antinukeRepo.deleteRoleRule(gid, roleId);
+  recordAudit(req, `Удалены правила антикраша для роли ${roleId}`, 'anticrash', { targetId: roleId });
+  res.json({ ok: true });
+});
+
 // Статус Lockdown
 router.get('/lockdown', canView, (req, res) => {
   const gid = req.query.guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';

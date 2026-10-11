@@ -116,12 +116,32 @@ document.addEventListener('alpine:init', () => {
       reason: '',
     },
 
-    // 7. Anticrash
+    // 7. Anticrash & Гибкие лимиты по ролям
     anticrashRules: [],
+    anticrashRoleRules: [],
     anticrashModified: false,
     lockdownStatus: false,
     snapshots: [],
     incidents: [],
+    roleRuleModal: {
+      open: false,
+      isEdit: false,
+      roleId: '',
+      roleName: '',
+      permissions: {},
+    },
+    anticrashActionTypes: [
+      { key: 'channel_delete', name: 'Удаление каналов', desc: 'Удаление текстовых и голосовых каналов' },
+      { key: 'channel_create', name: 'Создание каналов', desc: 'Создание новых каналов и категорий' },
+      { key: 'role_delete', name: 'Удаление ролей', desc: 'Удаление ролей с сервера' },
+      { key: 'role_create', name: 'Создание ролей', desc: 'Создание новых ролей' },
+      { key: 'ban', name: 'Блокировка (Бан)', desc: 'Блокировка участников сервера' },
+      { key: 'kick', name: 'Исключение (Кик)', desc: 'Выгон участников с сервера' },
+      { key: 'webhook_create', name: 'Создание вебхуков', desc: 'Создание Webhook интеграций' },
+      { key: 'bot_add', name: 'Добавление ботов', desc: 'Инвайт сторонних ботов на сервер' },
+      { key: 'emoji_delete', name: 'Удаление эмодзи', desc: 'Удаление эмодзи и стикеров' },
+      { key: 'guild_update', name: 'Изменение сервера', desc: 'Смена названия, аватарки или настроек сервера' },
+    ],
 
     // 8. Logs
     logsData: { items: [], total: 0, page: 1 },
@@ -763,17 +783,103 @@ document.addEventListener('alpine:init', () => {
     // 7. Anticrash
     async loadAnticrashData() {
       const gid = this.getActiveGuildId() || this.guilds.main.id;
-      const [rules, lockdown, snapshots, incidents] = await Promise.all([
-        this.apiFetch(`/api/anticrash/rules?guildId=${gid}`),
-        this.apiFetch(`/api/anticrash/lockdown?guildId=${gid}`),
-        this.apiFetch(`/api/anticrash/snapshots?guildId=${gid}`),
-        this.apiFetch(`/api/anticrash/incidents?guildId=${gid}`),
+      const [rules, lockdown, snapshots, incidents, roleRules] = await Promise.all([
+        this.apiFetch(`/api/anticrash/rules?guildId=${gid}`).catch(() => []),
+        this.apiFetch(`/api/anticrash/lockdown?guildId=${gid}`).catch(() => ({ active: false })),
+        this.apiFetch(`/api/anticrash/snapshots?guildId=${gid}`).catch(() => []),
+        this.apiFetch(`/api/anticrash/incidents?guildId=${gid}`).catch(() => []),
+        this.apiFetch(`/api/anticrash/role-rules?guildId=${gid}`).catch(() => []),
       ]);
       this.anticrashRules = rules;
-      this.lockdownStatus = lockdown.enabled;
+      this.lockdownStatus = Boolean(lockdown.active || lockdown.enabled);
       this.snapshots = snapshots;
       this.incidents = incidents;
+      this.anticrashRoleRules = roleRules;
       this.anticrashModified = false;
+    },
+
+    openAddRoleRuleModal() {
+      const defaultPerms = {};
+      for (const act of this.anticrashActionTypes) {
+        defaultPerms[act.key] = {
+          allowed: true,
+          limit: 3,
+          window: 60,
+          action: 'quarantine',
+        };
+      }
+      this.roleRuleModal = {
+        open: true,
+        isEdit: false,
+        roleId: '',
+        roleName: '',
+        permissions: defaultPerms,
+      };
+    },
+
+    openEditRoleRuleModal(rule) {
+      const perms = {};
+      for (const act of this.anticrashActionTypes) {
+        perms[act.key] = rule.permissions?.[act.key] ? { ...rule.permissions[act.key] } : {
+          allowed: true,
+          limit: 3,
+          window: 60,
+          action: 'quarantine',
+        };
+      }
+      this.roleRuleModal = {
+        open: true,
+        isEdit: true,
+        roleId: rule.role_id,
+        roleName: rule.role_name || rule.role_id,
+        permissions: perms,
+      };
+    },
+
+    async saveRoleRule() {
+      if (!this.roleRuleModal.roleId) {
+        this.showToast('error', 'Выберите роль');
+        return;
+      }
+      const gid = this.getActiveGuildId() || this.guilds.main.id;
+      const roleObj = this.getRoleById(this.roleRuleModal.roleId);
+      const roleName = roleObj?.name || this.roleRuleModal.roleName || this.roleRuleModal.roleId;
+
+      try {
+        await this.apiFetch('/api/anticrash/role-rules', {
+          method: 'POST',
+          body: JSON.stringify({
+            guildId: gid,
+            roleId: this.roleRuleModal.roleId,
+            roleName,
+            permissions: this.roleRuleModal.permissions,
+          }),
+        });
+        this.showToast('success', `Лимиты антикраша для роли "${roleName}" успешно сохранены`);
+        this.roleRuleModal.open = false;
+        await this.loadAnticrashData();
+      } catch (e) {
+        this.showToast('error', e.message);
+      }
+    },
+
+    async deleteRoleRule(roleId, roleName) {
+      this.openConfirm({
+        title: `Сброс правил для роли ${roleName || roleId}`,
+        message: `Вы действительно хотите удалить персональные правила антикраша для роли "${roleName || roleId}"?`,
+        confirmBtnText: 'Удалить правила',
+        confirmBtnClass: 'btn-danger',
+        onConfirm: async () => {
+          try {
+            const gid = this.getActiveGuildId() || this.guilds.main.id;
+            await this.apiFetch(`/api/anticrash/role-rules/${roleId}?guildId=${gid}`, { method: 'DELETE' });
+            this.showToast('success', 'Правила для роли сброшены');
+            await this.loadAnticrashData();
+          } catch (e) {
+            this.showToast('error', e.message);
+          }
+        }
+      });
     },
 
     async toggleLockdown() {

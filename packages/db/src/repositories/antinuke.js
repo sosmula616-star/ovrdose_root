@@ -55,6 +55,40 @@ const antinukeRepo = {
 
   resolveIncident(id) {
     return getDb().prepare('UPDATE incidents SET resolved = 1 WHERE id = ?').run(id);
+  },
+
+  // --- Гибкие лимиты и правила по ролям ---
+  getRoleRules(guildId) {
+    const rows = getDb().prepare('SELECT * FROM antinuke_role_rules WHERE guild_id = ? ORDER BY id ASC').all(guildId);
+    return rows.map(r => ({
+      ...r,
+      permissions: typeof r.permissions === 'string' ? JSON.parse(r.permissions) : (r.permissions || {})
+    }));
+  },
+
+  getRoleRule(guildId, roleId) {
+    const row = getDb().prepare('SELECT * FROM antinuke_role_rules WHERE guild_id = ? AND role_id = ?').get(guildId, roleId);
+    if (!row) return null;
+    return {
+      ...row,
+      permissions: typeof row.permissions === 'string' ? JSON.parse(row.permissions) : (row.permissions || {})
+    };
+  },
+
+  setRoleRule(guildId, roleId, roleName, permissions) {
+    const permissionsStr = typeof permissions === 'object' ? JSON.stringify(permissions) : permissions;
+    return getDb().prepare(`
+      INSERT INTO antinuke_role_rules (guild_id, role_id, role_name, permissions)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(guild_id, role_id) DO UPDATE SET
+        role_name = excluded.role_name,
+        permissions = excluded.permissions,
+        updated_at = datetime('now')
+    `).run(guildId, roleId, roleName, permissionsStr);
+  },
+
+  deleteRoleRule(guildId, roleId) {
+    return getDb().prepare('DELETE FROM antinuke_role_rules WHERE guild_id = ? AND role_id = ?').run(guildId, roleId);
   }
 };
 

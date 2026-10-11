@@ -71,16 +71,83 @@ class AntinukeModule {
   }
 
   /**
+   * Получить эффективное правило для конкретного участника с учетом его ролей
+   */
+  getMemberEffectiveRule(guildId, member, eventType) {
+    if (!member || !member.roles?.cache) {
+      return this.getRule(guildId, eventType);
+    }
+
+    const roleRules = antinukeRepo.getRoleRules(guildId);
+    if (!roleRules || roleRules.length === 0) {
+      return this.getRule(guildId, eventType);
+    }
+
+    // Ищем правила для ролей участника
+    const matchingRoleRules = [];
+    for (const rr of roleRules) {
+      if (member.roles.cache.has(rr.role_id)) {
+        matchingRoleRules.push(rr);
+      }
+    }
+
+    if (matchingRoleRules.length === 0) {
+      return this.getRule(guildId, eventType);
+    }
+
+    // Находим наиболее подходящее правило
+    let effective = null;
+
+    for (const rr of matchingRoleRules) {
+      const actRule = rr.permissions?.[eventType];
+      if (actRule) {
+        if (actRule.allowed !== false) {
+          const lim = parseInt(actRule.limit ?? 5, 10);
+          if (!effective || (effective.allowed && lim > effective.limit)) {
+            effective = {
+              allowed: true,
+              limit: lim,
+              window: parseInt(actRule.window ?? 10, 10),
+              action: actRule.action || 'quarantine',
+              enabled: true,
+              roleName: rr.role_name,
+            };
+          }
+        } else {
+          // Если явно запрещено для роли
+          if (!effective) {
+            effective = {
+              allowed: false,
+              limit: 0,
+              window: parseInt(actRule.window ?? 10, 10),
+              action: actRule.action || 'remove_roles',
+              enabled: true,
+              roleName: rr.role_name,
+            };
+          }
+        }
+      }
+    }
+
+    return effective || this.getRule(guildId, eventType);
+  }
+
+  /**
    * Проверка скользящего окна лимитов действий
    * @returns {boolean} true если лимит превышен
    */
   trackAction(guildId, userId, eventType) {
     const rule = this.getRule(guildId, eventType);
+    return this.trackActionWithRule(guildId, userId, eventType, rule);
+  }
+
+  trackActionWithRule(guildId, userId, eventType, rule) {
     if (!rule.enabled) return false;
+    if (rule.allowed === false || rule.limit <= 0) return true;
 
     const key = `${guildId}:${userId}:${eventType}`;
     const now = Date.now();
-    const windowMs = rule.window * 1000;
+    const windowMs = (rule.window || 10) * 1000;
 
     let timestamps = this.actionWindows.get(key) || [];
     timestamps = timestamps.filter(t => (now - t) < windowMs);
@@ -197,16 +264,27 @@ class AntinukeModule {
       }
     }
 
+    // Проверка эффективных лимитов роли нарушителя
+    const effectiveRule = this.getMemberEffectiveRule(guild.id, executor, eventType);
+
+    // Если действие запрещено для роли (allowed: false или limit: 0)
+    if (effectiveRule.allowed === false) {
+      const reason = `[Антикраш] Действие "${eventType}" запрещено для роли ${effectiveRule.roleName || 'пользователя'}`;
+      await this.punish(guild, executor, effectiveRule.action, reason);
+      antinukeRepo.recordIncident(guild.id, eventType, executorId, executor?.user?.tag || executorId, { rule: effectiveRule, forbidden: true }, effectiveRule.action);
+      await this.loggingModule.criticalSecurity(guild.id, `🚨 НАРУШЕНИЕ ПРАВ РОЛИ: ${executor?.user?.tag || executorId} попытался выполнить запрещенное действие **${eventType}** (роль: ${effectiveRule.roleName || '—'})! Наказание: ${effectiveRule.action}`);
+      return;
+    }
+
     // Проверка превышения скользящего окна
-    const exceeded = this.trackAction(guild.id, executorId, eventType);
+    const exceeded = this.trackActionWithRule(guild.id, executorId, eventType, effectiveRule);
     if (exceeded) {
-      const rule = this.getRule(guild.id, eventType);
-      const reason = `[Antinuke] Превышен лимит ${rule.limit} действий (${eventType}) за ${rule.window}с`;
+      const reason = `[Антикраш] Превышен лимит ${effectiveRule.limit} действий (${eventType}) за ${effectiveRule.window}с для роли ${effectiveRule.roleName || 'пользователя'}`;
 
-      await this.punish(guild, executor, rule.action, reason);
-      antinukeRepo.recordIncident(guild.id, eventType, executorId, executor?.user?.tag || executorId, { rule }, rule.action);
+      await this.punish(guild, executor, effectiveRule.action, reason);
+      antinukeRepo.recordIncident(guild.id, eventType, executorId, executor?.user?.tag || executorId, { rule: effectiveRule }, effectiveRule.action);
 
-      await this.loggingModule.criticalSecurity(guild.id, `🚨 АНТИКРАШ СРАБОТАЛ: ${executor?.user?.tag || executorId} превысил лимит ${eventType}! Действие: ${rule.action}`);
+      await this.loggingModule.criticalSecurity(guild.id, `🚨 АНТИКРАШ СРАБОТАЛ: ${executor?.user?.tag || executorId} превысил лимит ${eventType} (${effectiveRule.limit} за ${effectiveRule.window}с, роль: ${effectiveRule.roleName || '—'})! Наказание: ${effectiveRule.action}`);
     }
   }
 
