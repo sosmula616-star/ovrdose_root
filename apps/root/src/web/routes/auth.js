@@ -3,7 +3,7 @@
  */
 
 const router = require('express').Router();
-const fetch = require('node-fetch');
+const fetch = globalThis.fetch || ((...args) => import('node-fetch').then(({default: f}) => f(...args)));
 const { system: systemRepo } = require('@root-core/db');
 const { recordAudit } = require('../middleware/audit');
 

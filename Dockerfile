@@ -18,6 +18,7 @@ COPY packages/ packages/
 COPY apps/ apps/
 COPY scripts/ scripts/
 COPY ecosystem.config.js ./
+COPY index.js ./
 
 # Установка зависимостей всех workspaces
 RUN npm install

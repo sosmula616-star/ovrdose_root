@@ -3,7 +3,7 @@
  * Обеспечивает отправку Heartbeat, чтение настроек, hot reload и логирование действий.
  */
 
-const fetch = require('node-fetch');
+const fetch = globalThis.fetch || ((...args) => import('node-fetch').then(({default: f}) => f(...args)));
 const EventEmitter = require('events');
 
 class ExternalBotClient extends EventEmitter {
