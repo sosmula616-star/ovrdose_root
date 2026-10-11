@@ -30,9 +30,15 @@ module.exports = {
         return;
       }
 
-      // 2. Селект-меню выбора роли в магазине
-      if (interaction.isStringSelectMenu() && interaction.customId === 'select_shop_role') {
-        const roleId = interaction.values[0];
+      // 2. Селект-меню или быстрая кнопка выбора роли в магазине за монеты
+      const isShopRolePick = (interaction.isStringSelectMenu() && interaction.customId === 'select_shop_role') ||
+                             (interaction.isButton() && interaction.customId.startsWith('shop_pick_'));
+
+      if (isShopRolePick) {
+        const roleId = interaction.isStringSelectMenu()
+          ? interaction.values[0]
+          : interaction.customId.replace('shop_pick_', '');
+
         const eco = client.modules.economy;
         const config = eco.getSettings(interaction.guildId);
 
@@ -47,7 +53,7 @@ module.exports = {
         const roleName = customRole ? customRole.name : shopItem.name;
         const basePrice = customRole ? customRole.price : shopItem.price;
 
-        // Рассчитываем цены по периодам
+        // Рассчитываем цены по периодам в монетах
         const p1m = ecoRepo.calculatePeriodPrice(basePrice, '1_month');
         const p3m = ecoRepo.calculatePeriodPrice(basePrice, '3_months');
         const p6m = ecoRepo.calculatePeriodPrice(basePrice, '6_months');
@@ -55,28 +61,38 @@ module.exports = {
         const pFor = ecoRepo.calculatePeriodPrice(basePrice, 'forever');
 
         const embed = new EmbedBuilder()
-          .setTitle(`🛍️ Покупка роли: ${roleName}`)
+          .setTitle(`🛍️ Покупка роли за монеты: ${roleName}`)
           .setColor(0xC8A96A)
           .setDescription(
-            `Выберите желаемый период действия роли **${roleName}**.\n` +
-            `Стоимость автоматически рассчитана от базовой цены (**${basePrice} ${config.currencySymbol}**):\n\n` +
+            `Выберите период действия роли **${roleName}**.\n` +
+            `Оплата производится с вашего баланса монет (**${config.currencySymbol}**):\n\n` +
             `• 🗓️ **1 месяц (30 дней):** \`${p1m} ${config.currencySymbol}\`\n` +
             `• 🗓️ **3 месяца (90 дней):** \`${p3m} ${config.currencySymbol}\` *(выгода 17%)*\n` +
             `• 🗓️ **6 месяцев (180 дней):** \`${p6m} ${config.currencySymbol}\` *(выгода 25%)*\n` +
             `• 🗓️ **1 год (365 дней):** \`${p1y} ${config.currencySymbol}\` *(выгода 33%)*\n` +
-            `• ♾️ **Навсегда:** \`${pFor} ${config.currencySymbol}\``
+            `• ♾️ **Навсегда (бессрочно):** \`${pFor} ${config.currencySymbol}\``
           )
-          .setFooter({ text: 'Нажмите кнопку ниже для подтверждения покупки' });
+          .setFooter({ text: 'Нажмите кнопку с нужным сроком для покупки роли за монеты' });
 
         const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(`buy_period_${roleId}_1_month`).setLabel(`1 мес (${p1m})`).setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId(`buy_period_${roleId}_3_months`).setLabel(`3 мес (${p3m})`).setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId(`buy_period_${roleId}_6_months`).setLabel(`6 мес (${p6m})`).setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId(`buy_period_${roleId}_1_year`).setLabel(`1 год (${p1y})`).setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId(`buy_period_${roleId}_forever`).setLabel(`Навсегда (${pFor})`).setStyle(ButtonStyle.Danger)
+          new ButtonBuilder().setCustomId(`buy_period_${roleId}_1_month`).setLabel(`1 мес (${p1m} 🪙)`).setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId(`buy_period_${roleId}_3_months`).setLabel(`3 мес (${p3m} 🪙)`).setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId(`buy_period_${roleId}_6_months`).setLabel(`6 мес (${p6m} 🪙)`).setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId(`buy_period_${roleId}_1_year`).setLabel(`1 год (${p1y} 🪙)`).setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`buy_period_${roleId}_forever`).setLabel(`Навсегда (${pFor} 🪙)`).setStyle(ButtonStyle.Danger)
         );
 
         return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+      }
+
+      // Информационная кнопка о создании роли
+      if (interaction.isButton() && interaction.customId === 'quick_create_role_info') {
+        const eco = client.modules.economy;
+        const config = eco.getSettings(interaction.guildId);
+        return interaction.reply({
+          content: `🎨 **Создание кастомной роли за монеты:**\nИспользуйте команду в чате: \`!createrole <Название_роли> [#HEX_цвет]\`\nСтоимость создания: **${config.roleCreatePrice || 5000} ${config.currencySymbol}**\nЛимит: не более **${config.maxCustomRolesPerUser || 2}** ролей на одного пользователя.`,
+          ephemeral: true
+        });
       }
 
       // 3. Обработка нажатий на кнопки покупки по периодам

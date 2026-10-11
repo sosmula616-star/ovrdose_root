@@ -151,6 +151,23 @@ class EconomyModule {
     return economyRepo.getInventory(userId);
   }
 
+  /**
+   * Добавить роль или товар в официальный магазин за монеты
+   */
+  async addShopItem(name, price, description = '', roleId = null, stock = null) {
+    if (!name) throw new Error('Укажите название роли или товара');
+    const numPrice = parseInt(price, 10);
+    if (isNaN(numPrice) || numPrice < 0) throw new Error('Цена должна быть положительным числом монет');
+    return economyRepo.addShopItem(name, numPrice, description, roleId, stock);
+  }
+
+  /**
+   * Удалить товар из магазина
+   */
+  async deleteShopItem(id) {
+    return economyRepo.deleteShopItem(id);
+  }
+
   // --- Кастомные декоративные роли (Без прав, только цвет и красота) ---
 
   /**

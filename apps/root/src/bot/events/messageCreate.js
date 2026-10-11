@@ -547,38 +547,85 @@ module.exports = {
 
       // --- !market / !shop / !roleshop ---
       if (cmd === 'market' || cmd === 'shop' || cmd === 'roleshop') {
+        const wallet = await ecoModule.getBalance(message.author.id);
         const officialItems = await ecoModule.getShop(true);
         const marketRoles = await ecoModule.getMarketplaceRoles(message.guild.id);
 
-        let desc = '🛍️ **Выберите роль в выпадающем меню ниже**, чтобы увидеть доступные периоды (1 мес, 3 мес, 6 мес, 1 год, навсегда) и оформить покупку по активным кнопкам!\n\n';
+        let desc = `💰 **Ваш баланс:** \`${wallet.balance.toLocaleString('ru-RU')} ${config.currencySymbol}\`\n\n` +
+          `Все роли в магазине приобретаются за внутриигровые **монеты**! Нажмите активную кнопку с ролью ниже или выберите из меню, чтобы рассчитать периоды подписки (1 мес, 3 мес, 6 мес, 1 год, навсегда) и оплатить:\n\n`;
 
-        desc += '**👑 Официальные роли магазина:**\n';
+        desc += '**👑 Официальные роли сервера за монеты:**\n';
         if (officialItems.length === 0) {
-          desc += '*В официальном магазине пока нет ролей*\n\n';
+          desc += '*В официальном магазине пока нет ролей (Администратор может добавить: `!addshoprole <@роль> <цена>`)*\n\n';
         } else {
           for (const it of officialItems) {
-            desc += `• **${it.name}** — от **${it.price} ${config.currencySymbol}** ${it.description ? `(${it.description})` : ''}\n`;
+            const roleMention = it.role_id ? `<@&${it.role_id}>` : `**${it.name}**`;
+            desc += `• ${roleMention} — от **${it.price.toLocaleString('ru-RU')} ${config.currencySymbol}** ${it.description ? `*(${it.description})*` : ''}\n`;
           }
           desc += '\n';
         }
 
-        desc += '**🎨 Кастомные роли игроков (Маркетплейс):**\n';
+        desc += '**🎨 Кастомные роли участников (Маркетплейс) за монеты:**\n';
         if (marketRoles.length === 0) {
-          desc += '*На маркетплейсе пока нет выставленных ролей*\n';
+          desc += '*На маркетплейсе пока нет ролей (Создайте свою: `!createrole`, выставить: `!sellrole`)*\n';
         } else {
           for (const r of marketRoles) {
             const iconBadge = r.icon ? `${r.icon} ` : '';
             const gradBadge = r.is_gradient ? ' 🌈' : '';
-            desc += `• ${iconBadge}<@&${r.role_id}>${gradBadge} — базовая цена: **${r.price} ${config.currencySymbol}** (автор: <@${r.owner_id}>, купили: ${r.buyers_count})\n`;
+            desc += `• ${iconBadge}<@&${r.role_id}>${gradBadge} — базовая цена: **${r.price.toLocaleString('ru-RU')} ${config.currencySymbol}** (автор: <@${r.owner_id}>, купили: ${r.buyers_count})\n`;
           }
         }
 
         const embed = new EmbedBuilder()
-          .setTitle(`🛒 Магазин ролей и Маркетплейс — ${message.guild.name}`)
+          .setTitle(`🛒 Магазин ролей за монеты — ${message.guild.name}`)
           .setColor(0xC8A96A)
           .setDescription(desc)
-          .setFooter({ text: 'Создать свою роль: !createrole • Меню настройки роли: !rolemenu' });
+          .setFooter({ text: 'Создать роль за монеты: !createrole • Меню своей роли: !rolemenu' });
 
+        const components = [];
+
+        // 1. Активные кнопки быстрого выбора ролей для покупки за монеты (до 8 кнопок)
+        const allRolesList = [];
+        for (const it of officialItems) {
+          allRolesList.push({ id: String(it.role_id || it.id), name: it.name, price: it.price, isOfficial: true });
+        }
+        for (const r of marketRoles) {
+          allRolesList.push({ id: String(r.role_id), name: r.name || `Роль ${r.role_id}`, price: r.price, isOfficial: false });
+        }
+
+        if (allRolesList.length > 0) {
+          const firstChunk = allRolesList.slice(0, 4);
+          const row1 = new ActionRowBuilder();
+          for (const item of firstChunk) {
+            const icon = item.isOfficial ? '👑' : '🎨';
+            const label = `${icon} ${item.name} (${item.price} 🪙)`.slice(0, 80);
+            row1.addComponents(
+              new ButtonBuilder()
+                .setCustomId(`shop_pick_${item.id}`)
+                .setLabel(label)
+                .setStyle(item.isOfficial ? ButtonStyle.Success : ButtonStyle.Primary)
+            );
+          }
+          components.push(row1);
+
+          if (allRolesList.length > 4) {
+            const secondChunk = allRolesList.slice(4, 8);
+            const row2 = new ActionRowBuilder();
+            for (const item of secondChunk) {
+              const icon = item.isOfficial ? '👑' : '🎨';
+              const label = `${icon} ${item.name} (${item.price} 🪙)`.slice(0, 80);
+              row2.addComponents(
+                new ButtonBuilder()
+                  .setCustomId(`shop_pick_${item.id}`)
+                  .setLabel(label)
+                  .setStyle(item.isOfficial ? ButtonStyle.Success : ButtonStyle.Primary)
+              );
+            }
+            components.push(row2);
+          }
+        }
+
+        // 2. Селект-меню со всеми ролями
         const selectOptions = [];
         for (const it of officialItems) {
           if (selectOptions.length >= 25) break;
@@ -600,25 +647,74 @@ module.exports = {
           });
         }
 
-        const components = [];
         if (selectOptions.length > 0) {
           const selectMenu = new StringSelectMenuBuilder()
             .setCustomId('select_shop_role')
-            .setPlaceholder('🛒 Нажмите для выбора роли и периода подписки...')
+            .setPlaceholder('🛒 Или выберите роль из списка для покупки за монеты...')
             .addOptions(selectOptions);
 
           components.push(new ActionRowBuilder().addComponents(selectMenu));
         }
 
-        const quickButtons = new ActionRowBuilder().addComponents(
+        // 3. Дополнительные кнопки
+        const utilityRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId('open_my_role_menu')
             .setLabel('🎨 Мои роли (!rolemenu)')
+            .setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId('quick_create_role_info')
+            .setLabel(`➕ Создать роль (${config.roleCreatePrice || 5000} 🪙)`)
             .setStyle(ButtonStyle.Secondary)
         );
-        components.push(quickButtons);
+        components.push(utilityRow);
 
         return message.reply({ embeds: [embed], components });
+      }
+
+      // --- !addshoprole <@роль|ID> <цена_в_монетах> [описание] --- (ТОЛЬКО АДМИНИСТРАЦИЯ)
+      if (cmd === 'addshoprole') {
+        if (!access.isAdmin) {
+          return message.reply('🚫 У вас недостаточно прав для добавления ролей в магазин.');
+        }
+        const roleArg = args[0];
+        const price = parseInt(args[1], 10);
+        const description = args.slice(2).join(' ') || '';
+
+        const roleId = parseUserId(roleArg) || roleArg;
+        if (!roleId || isNaN(price) || price < 0) {
+          return message.reply('⚠️ Использование: `!addshoprole <@роль|ID> <цена_в_монетах> [описание]`\nПример: `!addshoprole @VIP 1000 Особая роль с цветом`');
+        }
+
+        let roleName = `Роль ${roleId}`;
+        const discordRole = await message.guild.roles.fetch(roleId).catch(() => null);
+        if (discordRole) {
+          roleName = discordRole.name;
+        }
+
+        try {
+          await ecoModule.addShopItem(roleName, price, description, roleId, null);
+          return message.reply(`✅ Роль **${roleName}** успешно добавлена в официальный магазин за **${price} ${config.currencySymbol}**! Игроки могут купить её в \`!shop\`.`);
+        } catch (err) {
+          return message.reply(`❌ Ошибка: ${err.message}`);
+        }
+      }
+
+      // --- !delshoprole <ID_товара> --- (ТОЛЬКО АДМИНИСТРАЦИЯ)
+      if (cmd === 'delshoprole') {
+        if (!access.isAdmin) {
+          return message.reply('🚫 У вас недостаточно прав для удаления ролей из магазина.');
+        }
+        const itemId = parseInt(args[0], 10);
+        if (isNaN(itemId)) {
+          return message.reply('⚠️ Использование: `!delshoprole <ID_товара_в_магазине>`');
+        }
+        try {
+          await ecoModule.deleteShopItem(itemId);
+          return message.reply(`🗑️ Товар #${itemId} успешно удален из магазина.`);
+        } catch (err) {
+          return message.reply(`❌ Ошибка: ${err.message}`);
+        }
       }
 
       // --- !rolemenu / !myrole / !myroles ---
@@ -862,6 +958,8 @@ module.exports = {
 
         if (access.isAdmin) {
           helpText += '\n**⚡ Экономика и управление сервером (Admin/Host):**\n' +
+            '`!addshoprole <@роль|ID> <цена> [описание]` — добавить роль в магазин за монеты\n' +
+            '`!delshoprole <ID>` — удалить роль из магазина\n' +
             '`!give <@user|ID> <сумма> [причина]` — выдать монеты\n' +
             '`!take <@user|ID> <сумма> [причина]` — списать монеты\n' +
             '`!setbalance <@user|ID> <сумма>` — установить точный баланс\n' +
