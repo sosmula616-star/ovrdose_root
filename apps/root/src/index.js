@@ -33,10 +33,8 @@ async function bootstrap() {
   // 1. Инициализация базы данных и применение миграций
   const dbPath = path.resolve(process.env.DB_PATH || './data/shared.db');
   logger.info(`[DB] Подключение к базе данных: ${dbPath}`);
-  initDatabase(dbPath);
-
-  logger.info('[DB] Проверка и накат миграций...');
-  runMigrations();
+  const db = initDatabase(dbPath);
+  logger.info('[DB] База данных успешно подключена, миграции применены.');
 
   // 2. Создание Discord-клиента Root
   logger.info('[Bot] Создание Discord-клиента Root...');
