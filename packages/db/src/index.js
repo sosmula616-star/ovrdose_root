@@ -85,11 +85,14 @@ function seedDefaults(database) {
 
   // Регистрация ботов Root и Guard
   const insertBot = database.prepare(`
-    INSERT OR IGNORE INTO bots (name, type, description, pm2_name, status)
-    VALUES (?, ?, ?, ?, 'offline')
+    INSERT INTO bots (name, type, client_id, description, pm2_name, status)
+    VALUES (?, ?, ?, ?, ?, 'offline')
+    ON CONFLICT(name) DO UPDATE SET
+      client_id = excluded.client_id,
+      description = excluded.description
   `);
-  insertBot.run('root', 'internal', 'Ядро системы, синхронизация и супервизор', 'root-core-root');
-  insertBot.run('guard', 'external', 'Внешний бот модерации и безопасности', 'root-core-guard');
+  insertBot.run('root', 'internal', process.env.DISCORD_CLIENT_ID_ROOT || '1558812630368522300', 'Ядро системы, синхронизация и супервизор', 'root-core-root');
+  insertBot.run('guard', 'external', process.env.GUARD_CLIENT_ID || '1558816485760303136', 'Внешний бот модерации и безопасности', 'root-core-guard');
 
   // Привязка ботов к серверам
   const insertBotServer = database.prepare(`

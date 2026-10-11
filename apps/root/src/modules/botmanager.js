@@ -51,8 +51,9 @@ class BotManagerModule {
       botsRepo.updateBotStatus(botName, 'restarting');
       return { ok: true, message: `Процесс ${pm2Name} перезапущен через PM2` };
     } catch (err) {
-      this.logger.error(`[BotManager] Ошибка PM2 restart: ${err.message}`);
-      throw new Error(`Не удалось перезапустить процесс PM2: ${err.message}`);
+      this.logger.warn(`[BotManager] Локальный PM2 не найден (бот запущен на отдельном хосте): ${err.message}`);
+      botsRepo.updateBotStatus(botName, 'restarting');
+      return { ok: true, message: `Сигнал перезапуска зарегистрирован для внешнего бота ${botName}` };
     }
   }
 

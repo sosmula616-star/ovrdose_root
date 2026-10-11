@@ -42,6 +42,17 @@ class SupervisorModule {
     const bots = botsRepo.getAllBots().filter(b => b.name !== 'root');
 
     for (const bot of bots) {
+      if (bot.client_id) {
+        const staffGuild = this.client.guilds.cache.get(this.STAFF_GUILD_ID);
+        const mainGuild = this.client.guilds.cache.get(this.MAIN_GUILD_ID);
+        const member = staffGuild?.members.cache.get(bot.client_id) || mainGuild?.members.cache.get(bot.client_id);
+        if (member) {
+          const isOnline = member.presence?.status && member.presence.status !== 'offline';
+          if (isOnline && bot.status !== 'online') {
+            botsRepo.updateBotStatus(bot.name, 'online', 40);
+          }
+        }
+      }
       await this.checkHeartbeat(bot);
       await this.checkBotServers(bot);
       await this.checkBotPermissions(bot);
