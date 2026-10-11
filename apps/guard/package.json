@@ -1,0 +1,13 @@
+{
+  "name": "@root-core/guard",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "description": "Внешний бот модерации Guard, управляемый через Root и веб-панель",
+  "dependencies": {
+    "@root-core/bot-client": "*",
+    "@root-core/db": "*",
+    "@root-core/shared": "*",
+    "discord.js": "^14.15.3",
+    "dotenv": "^16.4.5"
+  }
+}
