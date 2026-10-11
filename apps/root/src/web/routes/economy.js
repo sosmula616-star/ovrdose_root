@@ -48,16 +48,35 @@ router.get('/settings', canView, (req, res) => {
 
 const handleSaveSettings = (req, res) => {
   const { guildId, settings } = req.body;
-  const gid = guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';
+  const gid = guildId || req.query.guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';
+  const payload = settings || req.body || {};
 
-  for (const [k, v] of Object.entries(settings || req.body || {})) {
-    if (k !== 'guildId') {
-      settingsRepo.set(gid, 'root', k, typeof v === 'object' ? JSON.stringify(v) : String(v));
-    }
+  const map = {
+    currencyName: 'eco_currency_name',
+    currencySymbol: 'eco_currency_symbol',
+    dailyMin: 'eco_daily_min',
+    dailyMax: 'eco_daily_max',
+    dailyCooldown: 'eco_daily_cooldown',
+    workMin: 'eco_work_min',
+    workMax: 'eco_work_max',
+    workCooldown: 'eco_work_cooldown',
+    transferTaxPercent: 'eco_transfer_tax_percent',
+    transferLimitDay: 'eco_transfer_limit_day',
+    startBalance: 'eco_start_balance',
+    roleCreatePrice: 'eco_role_create_price',
+    marketplaceTaxPercent: 'eco_market_tax_percent',
+    voiceRewardPerMin: 'eco_voice_reward',
+    messageReward: 'eco_chat_reward',
+  };
+
+  for (const [k, v] of Object.entries(payload)) {
+    if (k === 'guildId' || v === undefined) continue;
+    const dbKey = map[k] || k;
+    settingsRepo.set(gid, 'root', dbKey, typeof v === 'object' ? JSON.stringify(v) : String(v));
   }
 
   recordAudit(req, 'Обновлены настройки экономики', 'economy', { newValue: req.body });
-  res.json({ ok: true, message: 'Настройки экономики сохранены' });
+  res.json({ ok: true, message: 'Настройки экономики успешно сохранены' });
 };
 
 router.post('/settings', canEdit, handleSaveSettings);
@@ -174,6 +193,36 @@ router.delete('/shop/:id', canEdit, (req, res) => {
   ecoRepo.deleteShopItem(req.params.id);
   recordAudit(req, `Удален товар магазина #${req.params.id}`, 'economy');
   res.json({ ok: true });
+});
+
+// Кастомные роли участников (созданные для красоты)
+router.get('/custom-roles', canView, (req, res) => {
+  const gid = req.query.guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';
+  const roles = ecoRepo.getCustomRoles(gid);
+  res.json(roles || []);
+});
+
+router.delete('/custom-roles/:roleId', canEdit, async (req, res) => {
+  const { roleId } = req.params;
+  const gid = req.query.guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';
+  const eco = req.app.locals.client?.modules?.economy;
+  const guild = req.app.locals.client?.guilds?.cache?.get(gid);
+
+  if (eco) {
+    await eco.deleteCustomRole(guild, roleId);
+  } else {
+    ecoRepo.deleteCustomRole(roleId);
+  }
+
+  recordAudit(req, `Удалена кастомная роль ${roleId}`, 'economy');
+  res.json({ ok: true, message: 'Кастомная роль удалена' });
+});
+
+// Статистика персонала и модераторов
+router.get('/staff-stats', canView, (req, res) => {
+  const gid = req.query.guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';
+  const stats = ecoRepo.getAllStaffStats(gid);
+  res.json(stats || []);
 });
 
 module.exports = router;

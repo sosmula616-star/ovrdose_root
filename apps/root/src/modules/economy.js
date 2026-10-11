@@ -142,6 +142,163 @@ class EconomyModule {
     return economyRepo.getInventory(userId);
   }
 
+  // --- Кастомные декоративные роли (Без прав, только цвет и красота) ---
+
+  /**
+   * Создание кастомной роли за монеты без каких-либо прав (permissions: 0n)
+   */
+  async createCustomRole(guild, userId, roleName, hexColor = '#C8A96A') {
+    if (!guild) throw new Error('Сервер Discord не указан');
+    const config = this.getSettings(guild.id);
+    const price = config.roleCreatePrice || 5000;
+
+    const wallet = await this.getBalance(userId);
+    if (wallet.balance < price) {
+      throw new Error(`Недостаточно средств для создания роли. Требуется: ${price} ${config.currencySymbol}, у вас: ${wallet.balance}`);
+    }
+
+    // Очистка и валидация названия роли
+    const cleanName = String(roleName || '').trim().slice(0, 50);
+    if (!cleanName || cleanName.length < 2) {
+      throw new Error('Название роли должно содержать от 2 до 50 символов');
+    }
+
+    // Валидация цвета
+    let validColor = hexColor.startsWith('#') ? hexColor : `#${hexColor}`;
+    if (!/^#[0-9A-Fa-f]{6}$/.test(validColor)) {
+      validColor = '#C8A96A';
+    }
+
+    // 1. Создаем роль в Discord БЕЗ прав (permissions: 0n)
+    let discordRole;
+    try {
+      discordRole = await guild.roles.create({
+        name: cleanName,
+        color: validColor,
+        permissions: 0n, // Строго БЕЗ прав!
+        mentionable: false,
+        reason: `[Экономика] Создание кастомной декоративной роли участником ID ${userId}`,
+      });
+    } catch (err) {
+      this.logger.error(`[Economy] Ошибка создания Discord роли: ${err.message}`);
+      throw new Error(`Не удалось создать роль в Discord: ${err.message}`);
+    }
+
+    // 2. Списываем средства
+    try {
+      economyRepo.modifyBalance(userId, -price, 'custom_role_create', `Создание декоративной роли "${cleanName}"`, null, { roleId: discordRole.id, color: validColor });
+    } catch (err) {
+      // Откатываем роль если списание упало
+      await discordRole.delete().catch(() => {});
+      throw err;
+    }
+
+    // 3. Выдаем роль создателю в Discord
+    try {
+      const member = await guild.members.fetch(userId);
+      if (member) {
+        await member.roles.add(discordRole.id, `Создатель кастомной роли ${cleanName}`);
+      }
+    } catch (err) {
+      this.logger.warn(`[Economy] Не удалось выдать созданную роль участнику: ${err.message}`);
+    }
+
+    // 4. Записываем в базу данных
+    economyRepo.createCustomRole(guild.id, userId, discordRole.id, cleanName, validColor, 0, 0);
+
+    return {
+      ok: true,
+      role: discordRole,
+      name: cleanName,
+      color: validColor,
+      pricePaid: price,
+      currency: config.currencySymbol,
+    };
+  }
+
+  /**
+   * Выставить кастомную роль на маркетплейс
+   */
+  async sellCustomRole(guildId, userId, roleId, price) {
+    const roleItem = economyRepo.getCustomRoleByRoleId(roleId);
+    if (!roleItem) throw new Error('Кастомная роль не найдена');
+    if (roleItem.owner_id !== userId) throw new Error('Вы не являетесь владельцем этой роли');
+
+    const numPrice = parseInt(price, 10);
+    if (isNaN(numPrice) || numPrice < 1) throw new Error('Цена должна быть не менее 1 монеты');
+
+    economyRepo.setCustomRoleSale(roleId, userId, 1, numPrice);
+    return { ok: true, roleItem, price: numPrice };
+  }
+
+  /**
+   * Снять кастомную роль с продажи на маркетплейсе
+   */
+  async removeSaleCustomRole(userId, roleId) {
+    const roleItem = economyRepo.getCustomRoleByRoleId(roleId);
+    if (!roleItem) throw new Error('Кастомная роль не найдена');
+    if (roleItem.owner_id !== userId) throw new Error('Вы не являетесь владельцем этой роли');
+
+    economyRepo.setCustomRoleSale(roleId, userId, 0, roleItem.price);
+    return { ok: true };
+  }
+
+  /**
+   * Покупка кастомной роли на маркетплейсе
+   */
+  async buyCustomRole(guild, buyerId, roleId) {
+    if (!guild) throw new Error('Сервер не указан');
+    const config = this.getSettings(guild.id);
+    const taxPercent = config.marketplaceTaxPercent || 10;
+
+    const result = economyRepo.buyCustomRole(buyerId, roleId, taxPercent);
+
+    // Выдаем роль покупателю в Discord
+    try {
+      const member = await guild.members.fetch(buyerId);
+      if (member && !member.roles.cache.has(roleId)) {
+        await member.roles.add(roleId, `Покупка кастомной роли на Маркетплейсе: ${result.roleItem.name}`);
+      }
+    } catch (err) {
+      this.logger.warn(`[Economy] Ошибка выдачи купленной роли ${roleId}: ${err.message}`);
+    }
+
+    return { ok: true, ...result, currency: config.currencySymbol };
+  }
+
+  /**
+   * Список кастомных ролей для маркетплейса
+   */
+  async getMarketplaceRoles(guildId) {
+    return economyRepo.getCustomRolesForSale(guildId);
+  }
+
+  /**
+   * Все кастомные роли сервера
+   */
+  async getCustomRoles(guildId) {
+    return economyRepo.getCustomRoles(guildId);
+  }
+
+  /**
+   * Удаление кастомной роли (администратором или создателем)
+   */
+  async deleteCustomRole(guild, roleId) {
+    const roleItem = economyRepo.getCustomRoleByRoleId(roleId);
+    if (guild && roleItem) {
+      try {
+        const discordRole = await guild.roles.fetch(roleId).catch(() => null);
+        if (discordRole) {
+          await discordRole.delete('Удаление кастомной роли через панель / бота');
+        }
+      } catch (err) {
+        this.logger.warn(`[Economy] Не удалось удалить роль из Discord: ${err.message}`);
+      }
+    }
+    economyRepo.deleteCustomRole(roleId);
+    return { ok: true };
+  }
+
   // --- Админские функции ---
 
   async give(userId, amount, reason, adminTag = 'Admin') {

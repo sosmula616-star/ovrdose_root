@@ -102,12 +102,15 @@ document.addEventListener('alpine:init', () => {
     },
 
     // 6. Economy
-    ecoStats: { totalBalance: 0, activeWallets: 0, transactionsCount: 0 },
+    ecoStats: { totalBalance: 0, activeWallets: 0, transactionsCount: 0, customRolesCount: 0 },
     ecoLeaderboard: [],
     ecoTransactions: [],
     ecoShopItems: [],
+    ecoCustomRoles: [],
+    ecoStaffStats: [],
     ecoSettings: {},
     ecoSettingsModified: false,
+    walletSearchId: '',
     userWalletModal: {
       open: false,
       userId: '',
@@ -115,6 +118,16 @@ document.addEventListener('alpine:init', () => {
       action: 'give', // give | take | set
       amount: 100,
       reason: '',
+    },
+    shopItemModal: {
+      open: false,
+      isEdit: false,
+      id: null,
+      name: '',
+      roleId: '',
+      price: 1000,
+      description: '',
+      stock: '',
     },
 
     // 7. Anticrash & Гибкие лимиты по ролям
@@ -767,25 +780,46 @@ document.addEventListener('alpine:init', () => {
 
     // 6. Economy
     async loadEconomyData() {
-      const [stats, leaderboard, txs, shop, settings] = await Promise.all([
-        this.apiFetch('/api/economy/stats'),
-        this.apiFetch('/api/economy/leaderboard?limit=10'),
-        this.apiFetch('/api/economy/transactions?limit=20'),
-        this.apiFetch('/api/economy/shop'),
-        this.apiFetch('/api/economy/settings'),
+      const gid = this.getActiveGuildId() || this.guilds.main.id;
+      const [stats, leaderboard, txs, shop, settings, customRoles, staffStats] = await Promise.all([
+        this.apiFetch(`/api/economy/stats?guildId=${gid}`).catch(() => ({ totalBalance: 0, activeWallets: 0, transactionsCount: 0 })),
+        this.apiFetch(`/api/economy/leaderboard?guildId=${gid}&limit=10`).catch(() => []),
+        this.apiFetch(`/api/economy/transactions?guildId=${gid}&limit=20`).catch(() => ({ items: [] })),
+        this.apiFetch(`/api/economy/shop?guildId=${gid}`).catch(() => []),
+        this.apiFetch(`/api/economy/settings?guildId=${gid}`).catch(() => ({})),
+        this.apiFetch(`/api/economy/custom-roles?guildId=${gid}`).catch(() => []),
+        this.apiFetch(`/api/economy/staff-stats?guildId=${gid}`).catch(() => []),
       ]);
-      this.ecoStats = stats;
+      this.ecoStats = {
+        ...stats,
+        customRolesCount: customRoles.length,
+      };
       this.ecoLeaderboard = leaderboard;
       this.ecoTransactions = txs.items || [];
       this.ecoShopItems = shop;
+      this.ecoCustomRoles = customRoles;
+      this.ecoStaffStats = staffStats;
       this.ecoSettings = settings;
       this.ecoSettingsModified = false;
     },
 
     async openWalletModal(userId) {
+      if (!userId) return;
       this.userWalletModal.userId = userId;
+      this.userWalletModal.reason = '';
+      this.userWalletModal.amount = 100;
       this.userWalletModal.wallet = await this.apiFetch(`/api/economy/wallets/${userId}`);
       this.userWalletModal.open = true;
+    },
+
+    async searchUserWallet() {
+      const uid = (this.walletSearchId || '').trim();
+      if (!uid) {
+        this.showToast('error', 'Введите Discord ID пользователя');
+        return;
+      }
+      await this.openWalletModal(uid);
+      this.walletSearchId = '';
     },
 
     async executeWalletAction() {
@@ -810,16 +844,120 @@ document.addEventListener('alpine:init', () => {
     },
 
     async saveEconomySettings() {
+      const gid = this.getActiveGuildId() || this.guilds.main.id;
       try {
         await this.apiFetch('/api/economy/settings', {
           method: 'POST',
-          body: JSON.stringify(this.ecoSettings),
+          body: JSON.stringify({
+            guildId: gid,
+            ...this.ecoSettings,
+          }),
         });
-        this.showToast('success', 'Настройки экономики сохранены');
+        this.showToast('success', 'Настройки экономики успешно сохранены');
         this.ecoSettingsModified = false;
+        await this.loadEconomyData();
       } catch (e) {
         this.showToast('error', e.message);
       }
+    },
+
+    openAddShopItemModal() {
+      this.shopItemModal = {
+        open: true,
+        isEdit: false,
+        id: null,
+        name: '',
+        roleId: '',
+        price: 1000,
+        description: '',
+        stock: '',
+      };
+    },
+
+    openEditShopItemModal(item) {
+      this.shopItemModal = {
+        open: true,
+        isEdit: true,
+        id: item.id,
+        name: item.name,
+        roleId: item.role_id || '',
+        price: item.price,
+        description: item.description || '',
+        stock: item.stock !== null && item.stock !== undefined ? item.stock : '',
+      };
+    },
+
+    async saveShopItem() {
+      if (!this.shopItemModal.name || !this.shopItemModal.price) {
+        this.showToast('error', 'Название и цена товара обязательны');
+        return;
+      }
+
+      const gid = this.getActiveGuildId() || this.guilds.main.id;
+      const payload = {
+        name: this.shopItemModal.name,
+        roleId: this.shopItemModal.roleId || null,
+        price: parseInt(this.shopItemModal.price, 10),
+        description: this.shopItemModal.description,
+        stock: this.shopItemModal.stock ? parseInt(this.shopItemModal.stock, 10) : null,
+      };
+
+      try {
+        if (this.shopItemModal.isEdit) {
+          await this.apiFetch(`/api/economy/shop/${this.shopItemModal.id}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload),
+          });
+          this.showToast('success', 'Товар в магазине обновлен');
+        } else {
+          await this.apiFetch('/api/economy/shop', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          });
+          this.showToast('success', 'Роль добавлена в официальный магазин');
+        }
+        this.shopItemModal.open = false;
+        await this.loadEconomyData();
+      } catch (e) {
+        this.showToast('error', e.message);
+      }
+    },
+
+    async deleteShopItem(id, name) {
+      this.openConfirm({
+        title: `Удаление товара "${name}"`,
+        message: `Вы действительно хотите удалить "${name}" из магазина ролей?`,
+        confirmBtnText: 'Удалить из магазина',
+        confirmBtnClass: 'btn-danger',
+        onConfirm: async () => {
+          try {
+            await this.apiFetch(`/api/economy/shop/${id}`, { method: 'DELETE' });
+            this.showToast('success', 'Товар удален из магазина');
+            await this.loadEconomyData();
+          } catch (e) {
+            this.showToast('error', e.message);
+          }
+        }
+      });
+    },
+
+    async deleteCustomRole(roleId, name) {
+      this.openConfirm({
+        title: `Удаление кастомной роли "${name || roleId}"`,
+        message: `Удалить эту роль с сервера и маркетплейса? Роль будет безвозвратно удалена из Discord и базы данных.`,
+        confirmBtnText: 'Удалить роль',
+        confirmBtnClass: 'btn-danger',
+        onConfirm: async () => {
+          const gid = this.getActiveGuildId() || this.guilds.main.id;
+          try {
+            await this.apiFetch(`/api/economy/custom-roles/${roleId}?guildId=${gid}`, { method: 'DELETE' });
+            this.showToast('success', 'Кастомная роль удалена');
+            await this.loadEconomyData();
+          } catch (e) {
+            this.showToast('error', e.message);
+          }
+        }
+      });
     },
 
     // 7. Anticrash

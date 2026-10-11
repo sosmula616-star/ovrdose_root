@@ -38,6 +38,11 @@ module.exports = {
     TRANSFER_LIMIT_DAY: 50000,
     TRANSFER_MIN_AGE_DAYS: 3,
     START_BALANCE: 0,
+    ROLE_CREATE_PRICE: 5000,         // Стоимость создания декоративной роли
+    MARKETPLACE_TAX_PERCENT: 10,     // Комиссия маркета при продаже роли другому игроку (%)
+    VOICE_REWARD_PER_MIN: 5,         // Награда за 1 минуту в голосовом канале
+    MESSAGE_REWARD: 2,               // Награда за сообщения в чате
+    MESSAGE_COOLDOWN: 30,            // Кулдаун награды за сообщения (сек)
   },
 
   // Типы событий антикраша и лимиты по умолчанию

@@ -247,7 +247,127 @@ const economyRepo = {
       INSERT OR REPLACE INTO cooldowns (user_id, command, expires_at)
       VALUES (?, ?, ?)
     `).run(userId, command, expiresAt);
+  },
+
+  // --- Кастомные роли пользователей (Декоративные / Без прав) ---
+  createCustomRole(guildId, ownerId, roleId, name, color = '#C8A96A', price = 0, forSale = 0) {
+    return getDb().prepare(`
+      INSERT INTO custom_roles (guild_id, owner_id, role_id, name, color, price, for_sale)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(guildId, ownerId, roleId, name, color, price, forSale ? 1 : 0);
+  },
+
+  getCustomRoles(guildId) {
+    return getDb().prepare(`
+      SELECT * FROM custom_roles WHERE guild_id = ? ORDER BY id DESC
+    `).all(guildId);
+  },
+
+  getCustomRolesForSale(guildId) {
+    return getDb().prepare(`
+      SELECT * FROM custom_roles WHERE guild_id = ? AND for_sale = 1 ORDER BY price ASC
+    `).all(guildId);
+  },
+
+  getCustomRoleByRoleId(roleId) {
+    return getDb().prepare(`
+      SELECT * FROM custom_roles WHERE role_id = ?
+    `).get(roleId);
+  },
+
+  getUserCustomRoles(ownerId) {
+    return getDb().prepare(`
+      SELECT * FROM custom_roles WHERE owner_id = ? ORDER BY id DESC
+    `).all(ownerId);
+  },
+
+  setCustomRoleSale(roleId, ownerId, forSale, price) {
+    return getDb().prepare(`
+      UPDATE custom_roles
+      SET for_sale = ?, price = ?, updated_at = datetime('now')
+      WHERE role_id = ? AND owner_id = ?
+    `).run(forSale ? 1 : 0, Math.max(0, parseInt(price || 0, 10)), roleId, ownerId);
+  },
+
+  deleteCustomRole(roleId) {
+    return getDb().prepare(`
+      DELETE FROM custom_roles WHERE role_id = ?
+    `).run(roleId);
+  },
+
+  buyCustomRole(buyerId, roleId, taxPercent = 10) {
+    const db = getDb();
+    const tx = db.transaction(() => {
+      const roleItem = this.getCustomRoleByRoleId(roleId);
+      if (!roleItem || !roleItem.for_sale) {
+        throw new Error('Данная роль не выставлена на продажу на Маркетплейсе');
+      }
+
+      if (roleItem.owner_id === buyerId) {
+        throw new Error('Вы являетесь создателем этой роли');
+      }
+
+      const price = roleItem.price;
+      const buyerWallet = this.getWallet(buyerId);
+      if (buyerWallet.balance < price) {
+        throw new Error(`Недостаточно средств. Цена роли: ${price}, у вас: ${buyerWallet.balance}`);
+      }
+
+      // Списание с покупателя
+      this.modifyBalance(buyerId, -price, 'custom_role_buy', `Покупка кастомной роли: ${roleItem.name}`, roleItem.owner_id, { roleId });
+
+      // Начисление продавцу за вычетом комиссии маркетплейса
+      const tax = Math.floor(price * (taxPercent / 100));
+      const sellerReward = price - tax;
+      this.modifyBalance(roleItem.owner_id, sellerReward, 'custom_role_sell', `Продажа кастомной роли: ${roleItem.name} (комиссия ${tax})`, buyerId, { roleId, tax });
+
+      // Обновляем статистику покупок роли
+      db.prepare(`
+        UPDATE custom_roles
+        SET buyers_count = buyers_count + 1, updated_at = datetime('now')
+        WHERE role_id = ?
+      `).run(roleId);
+
+      return { roleItem, price, sellerReward, tax };
+    });
+
+    return tx();
+  },
+
+  // --- Статистика стаффа и модераторов ---
+  getStaffStats(guildId, userId) {
+    let row = getDb().prepare(`
+      SELECT * FROM staff_stats WHERE guild_id = ? AND user_id = ?
+    `).get(guildId, userId);
+
+    if (!row) {
+      getDb().prepare(`
+        INSERT OR IGNORE INTO staff_stats (guild_id, user_id, verified_count, bans_count, mutes_count, kicks_count, warns_count, reports_count)
+        VALUES (?, ?, 0, 0, 0, 0, 0, 0)
+      `).run(guildId, userId);
+      row = { guild_id: guildId, user_id: userId, verified_count: 0, bans_count: 0, mutes_count: 0, kicks_count: 0, warns_count: 0, reports_count: 0 };
+    }
+    return row;
+  },
+
+  getAllStaffStats(guildId) {
+    return getDb().prepare(`
+      SELECT * FROM staff_stats WHERE guild_id = ? ORDER BY (verified_count + bans_count + mutes_count + warns_count) DESC
+    `).all(guildId);
+  },
+
+  incrementStaffStat(guildId, userId, userTag, field, delta = 1) {
+    const validFields = ['verified_count', 'bans_count', 'mutes_count', 'kicks_count', 'warns_count', 'reports_count'];
+    if (!validFields.includes(field)) return;
+
+    this.getStaffStats(guildId, userId); // guarantee row exists
+    return getDb().prepare(`
+      UPDATE staff_stats
+      SET ${field} = ${field} + ?, user_tag = COALESCE(?, user_tag), updated_at = datetime('now')
+      WHERE guild_id = ? AND user_id = ?
+    `).run(delta, userTag || null, guildId, userId);
   }
 };
 
 module.exports = economyRepo;
+

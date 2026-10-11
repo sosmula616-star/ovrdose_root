@@ -37,18 +37,23 @@ function toBoolean(val, defaultVal = false) {
  */
 function parseEconomySettings(rawSettings = {}) {
   return {
-    currencyName:        String(rawSettings['eco_currency_name'] || ECONOMY_DEFAULTS.CURRENCY_NAME).slice(0, 32),
-    currencySymbol:      String(rawSettings['eco_currency_symbol'] || ECONOMY_DEFAULTS.CURRENCY_SYMBOL).slice(0, 8),
-    dailyMin:            clampInt(rawSettings['eco_daily_min'], 1, 1000000, ECONOMY_DEFAULTS.DAILY_MIN),
-    dailyMax:            clampInt(rawSettings['eco_daily_max'], 1, 1000000, ECONOMY_DEFAULTS.DAILY_MAX),
-    dailyCooldown:       clampInt(rawSettings['eco_daily_cooldown'], 60, 604800, ECONOMY_DEFAULTS.DAILY_COOLDOWN),
-    workMin:             clampInt(rawSettings['eco_work_min'], 1, 1000000, ECONOMY_DEFAULTS.WORK_MIN),
-    workMax:             clampInt(rawSettings['eco_work_max'], 1, 1000000, ECONOMY_DEFAULTS.WORK_MAX),
-    workCooldown:        clampInt(rawSettings['eco_work_cooldown'], 60, 86400, ECONOMY_DEFAULTS.WORK_COOLDOWN),
-    transferTaxPercent:  clampInt(rawSettings['eco_transfer_tax_percent'], 0, 50, ECONOMY_DEFAULTS.TRANSFER_TAX_PERCENT),
-    transferLimitDay:    clampInt(rawSettings['eco_transfer_limit_day'], 0, 100000000, ECONOMY_DEFAULTS.TRANSFER_LIMIT_DAY),
-    transferMinAgeDays:  clampInt(rawSettings['eco_transfer_min_age_days'], 0, 365, ECONOMY_DEFAULTS.TRANSFER_MIN_AGE_DAYS),
-    startBalance:        clampInt(rawSettings['eco_start_balance'], 0, 1000000, ECONOMY_DEFAULTS.START_BALANCE),
+    currencyName:          String(rawSettings['eco_currency_name'] || ECONOMY_DEFAULTS.CURRENCY_NAME).slice(0, 32),
+    currencySymbol:        String(rawSettings['eco_currency_symbol'] || ECONOMY_DEFAULTS.CURRENCY_SYMBOL).slice(0, 8),
+    dailyMin:              clampInt(rawSettings['eco_daily_min'], 1, 1000000, ECONOMY_DEFAULTS.DAILY_MIN),
+    dailyMax:              clampInt(rawSettings['eco_daily_max'], 1, 1000000, ECONOMY_DEFAULTS.DAILY_MAX),
+    dailyCooldown:         clampInt(rawSettings['eco_daily_cooldown'], 60, 604800, ECONOMY_DEFAULTS.DAILY_COOLDOWN),
+    workMin:               clampInt(rawSettings['eco_work_min'], 1, 1000000, ECONOMY_DEFAULTS.WORK_MIN),
+    workMax:               clampInt(rawSettings['eco_work_max'], 1, 1000000, ECONOMY_DEFAULTS.WORK_MAX),
+    workCooldown:          clampInt(rawSettings['eco_work_cooldown'], 60, 86400, ECONOMY_DEFAULTS.WORK_COOLDOWN),
+    transferTaxPercent:    clampInt(rawSettings['eco_transfer_tax_percent'], 0, 50, ECONOMY_DEFAULTS.TRANSFER_TAX_PERCENT),
+    transferLimitDay:      clampInt(rawSettings['eco_transfer_limit_day'], 0, 100000000, ECONOMY_DEFAULTS.TRANSFER_LIMIT_DAY),
+    transferMinAgeDays:    clampInt(rawSettings['eco_transfer_min_age_days'], 0, 365, ECONOMY_DEFAULTS.TRANSFER_MIN_AGE_DAYS),
+    startBalance:          clampInt(rawSettings['eco_start_balance'], 0, 1000000, ECONOMY_DEFAULTS.START_BALANCE),
+    roleCreatePrice:       clampInt(rawSettings['eco_role_create_price'], 0, 10000000, ECONOMY_DEFAULTS.ROLE_CREATE_PRICE),
+    marketplaceTaxPercent: clampInt(rawSettings['eco_market_tax_percent'], 0, 50, ECONOMY_DEFAULTS.MARKETPLACE_TAX_PERCENT),
+    voiceRewardPerMin:     clampInt(rawSettings['eco_voice_reward'], 0, 1000, ECONOMY_DEFAULTS.VOICE_REWARD_PER_MIN),
+    messageReward:         clampInt(rawSettings['eco_chat_reward'], 0, 1000, ECONOMY_DEFAULTS.MESSAGE_REWARD),
+    messageCooldown:       clampInt(rawSettings['eco_chat_cooldown'], 5, 3600, ECONOMY_DEFAULTS.MESSAGE_COOLDOWN),
   };
 }
 
