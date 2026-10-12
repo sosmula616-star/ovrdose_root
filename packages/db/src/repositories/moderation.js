@@ -94,6 +94,56 @@ const moderationRepo = {
 
   deleteNote(id) {
     return getDb().prepare('DELETE FROM notes WHERE id = ?').run(id);
+  },
+
+  // --- История ников ---
+  addNicknameHistory(guildId, userId, oldNickname, newNickname) {
+    // Не записывать, если старый и новый ники одинаковые или оба пустые
+    if (oldNickname === newNickname) return null;
+    return getDb().prepare(`
+      INSERT INTO nickname_history (guild_id, user_id, old_nickname, new_nickname)
+      VALUES (?, ?, ?, ?)
+    `).run(guildId, userId, oldNickname, newNickname);
+  },
+
+  getNicknameHistory(guildId, userId, limit = 25) {
+    return getDb().prepare(`
+      SELECT * FROM nickname_history
+      WHERE guild_id = ? AND user_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(guildId, userId, limit);
+  },
+
+  // --- Предупреждения с таймером (1ч, 3ч, 6ч) ---
+  addTimedWarn({ guildId, userId, moderatorId, reason, durationHours, roleId, expiresAt }) {
+    return getDb().prepare(`
+      INSERT INTO timed_warns (guild_id, user_id, moderator_id, reason, duration_hours, role_id, expires_at, active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+    `).run(guildId, userId, moderatorId, reason, durationHours, roleId, expiresAt);
+  },
+
+  getActiveTimedWarns(guildId, userId) {
+    return getDb().prepare(`
+      SELECT * FROM timed_warns
+      WHERE guild_id = ? AND user_id = ? AND active = 1
+      ORDER BY created_at DESC
+    `).all(guildId, userId);
+  },
+
+  getExpiredTimedWarns() {
+    return getDb().prepare(`
+      SELECT * FROM timed_warns
+      WHERE active = 1 AND expires_at <= datetime('now')
+    `).all();
+  },
+
+  deactivateTimedWarn(id) {
+    return getDb().prepare('UPDATE timed_warns SET active = 0 WHERE id = ?').run(id);
+  },
+
+  deactivateAllTimedWarns(guildId, userId) {
+    return getDb().prepare('UPDATE timed_warns SET active = 0 WHERE guild_id = ? AND user_id = ?').run(guildId, userId);
   }
 };
 

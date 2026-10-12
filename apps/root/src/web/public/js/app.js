@@ -179,21 +179,35 @@ document.addEventListener('alpine:init', () => {
     auditLogs: { items: [], total: 0, page: 1 },
 
     // 12. Управление каналами и ролями (Channels & Roles Management)
+    channelSubTab: 'channels', // 'channels' | 'roles'
+    channelViewMode: 'tree',   // 'tree' | 'table'
+    channelSearch: '',
+    channelSortBy: 'position', // 'position' | 'name_asc' | 'name_desc' | 'type' | 'enforced'
+    channelFilter: 'all',      // 'all' | 'admin' | 'transit' | 'logs' | 'general' | 'enforced' | 'nsfw'
+    collapsedCategories: {},
     channelsData: {
       categories: [],
       channels: [],
       stats: { total: 0, admin: 0, transit: 0, logs: 0, enforced: 0 }
     },
-    channelFilter: 'all', // 'all' | 'admin' | 'transit' | 'logs' | 'general'
     newChannelModal: {
       open: false,
       guildId: '',
       name: '',
       type: 'text',
-      groupType: 'admin',
+      groupType: 'general',
       categoryId: '',
       categoryName: '',
-      isEnforced: true,
+      isEnforced: false,
+      nsfw: false,
+      rateLimitPerUser: 0,
+      topic: '',
+    },
+    newCategoryModal: {
+      open: false,
+      guildId: '',
+      name: '',
+      position: null,
     },
     editChannelModal: {
       open: false,
@@ -201,11 +215,43 @@ document.addEventListener('alpine:init', () => {
       channelId: '',
       name: '',
       type: 'text',
-      groupType: 'admin',
+      groupType: 'general',
       categoryId: '',
       categoryName: '',
       position: 0,
-      isEnforced: true,
+      isEnforced: false,
+      nsfw: false,
+      rateLimitPerUser: 0,
+      topic: '',
+    },
+
+    // Управление ролями сервера
+    serverRolesData: [],
+    rolesLoading: false,
+    roleSearch: '',
+    roleFilter: 'all',         // 'all' | 'whitelist' | 'sync' | 'admin' | 'hoist'
+    roleSortBy: 'hierarchy',   // 'hierarchy' | 'name_asc' | 'name_desc' | 'members'
+    newRoleModal: {
+      open: false,
+      guildId: '',
+      name: '',
+      color: '#5B8DB8',
+      hoist: false,
+      mentionable: false,
+      isWhitelist: false,
+    },
+    editRoleModal: {
+      open: false,
+      guildId: '',
+      roleId: '',
+      name: '',
+      color: '#5B8DB8',
+      hoist: false,
+      mentionable: false,
+      position: 0,
+      isWhitelist: false,
+      isAdmin: false,
+      managed: false,
     },
 
     // Кэш ролей и каналов из Discord для выпадающих списков
@@ -218,7 +264,7 @@ document.addEventListener('alpine:init', () => {
     async init() {
       // Определение текущей вкладки из URL
       const pathTab = window.location.pathname.replace(/^\//, '').split('/')[0];
-      const validTabs = ['dashboard', 'bots', 'channels', 'rolesync', 'permissions', 'moderation', 'economy', 'anticrash', 'logs', 'logchannels', 'backups', 'settings'];
+      const validTabs = ['dashboard', 'bots', 'channels', 'rolesync', 'permissions', 'moderation', 'modpanel', 'economy', 'anticrash', 'logs', 'logchannels', 'backups', 'settings'];
       if (pathTab && validTabs.includes(pathTab)) {
         this.activeTab = pathTab;
       }
@@ -435,7 +481,7 @@ document.addEventListener('alpine:init', () => {
             await this.loadBots();
             break;
           case 'channels':
-            await this.loadChannels();
+            await Promise.all([this.loadChannels(), this.loadServerRoles()]);
             break;
           case 'rolesync':
             await this.loadRoleSyncData();
@@ -1298,27 +1344,127 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    get filteredChannels() {
-      if (!this.channelsData?.channels) return [];
-      if (this.channelFilter === 'all') return this.channelsData.channels;
-      if (this.channelFilter === 'admin') return this.channelsData.channels.filter(c => c.groupType === 'admin');
-      if (this.channelFilter === 'transit') return this.channelsData.channels.filter(c => c.groupType === 'transit');
-      if (this.channelFilter === 'logs') return this.channelsData.channels.filter(c => c.groupType && c.groupType.startsWith('log_'));
-      if (this.channelFilter === 'general') return this.channelsData.channels.filter(c => c.groupType === 'general');
-      return this.channelsData.channels;
+    async loadServerRoles() {
+      const gid = this.getActiveGuildId() || this.guilds.main.id;
+      this.rolesLoading = true;
+      try {
+        const data = await this.apiFetch(`/api/discord/roles?guildId=${gid}`);
+        this.serverRolesData = data || [];
+      } catch (e) {
+        this.showToast('error', `Ошибка загрузки ролей: ${e.message}`);
+      } finally {
+        this.rolesLoading = false;
+      }
     },
 
-    openNewChannelModal() {
+    get filteredChannels() {
+      if (!this.channelsData?.channels) return [];
+      let list = [...this.channelsData.channels];
+
+      // Поиск по названию / ID / описанию
+      if (this.channelSearch && this.channelSearch.trim()) {
+        const q = this.channelSearch.trim().toLowerCase();
+        list = list.filter(c =>
+          (c.name && c.name.toLowerCase().includes(q)) ||
+          (c.id && c.id.includes(q)) ||
+          (c.topic && c.topic.toLowerCase().includes(q)) ||
+          (c.categoryName && c.categoryName.toLowerCase().includes(q))
+        );
+      }
+
+      // Фильтр по назначению или флагам
+      if (this.channelFilter === 'admin') list = list.filter(c => c.groupType === 'admin');
+      else if (this.channelFilter === 'transit') list = list.filter(c => c.groupType === 'transit');
+      else if (this.channelFilter === 'logs') list = list.filter(c => c.groupType && c.groupType.startsWith('log_'));
+      else if (this.channelFilter === 'general') list = list.filter(c => c.groupType === 'general');
+      else if (this.channelFilter === 'enforced') list = list.filter(c => Boolean(c.isEnforced));
+      else if (this.channelFilter === 'nsfw') list = list.filter(c => Boolean(c.nsfw));
+
+      // Сортировка
+      if (this.channelSortBy === 'position') {
+        list.sort((a, b) => a.position - b.position);
+      } else if (this.channelSortBy === 'name_asc') {
+        list.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+      } else if (this.channelSortBy === 'name_desc') {
+        list.sort((a, b) => b.name.localeCompare(a.name, 'ru'));
+      } else if (this.channelSortBy === 'type') {
+        list.sort((a, b) => a.type.localeCompare(b.type));
+      } else if (this.channelSortBy === 'enforced') {
+        list.sort((a, b) => (b.isEnforced ? 1 : 0) - (a.isEnforced ? 1 : 0));
+      }
+
+      return list;
+    },
+
+    get categorizedChannels() {
+      const allFiltered = this.filteredChannels;
+      const categories = (this.channelsData?.categories || []).map(cat => {
+        const catChannels = allFiltered.filter(c => c.categoryId === cat.id);
+        return {
+          id: cat.id,
+          name: cat.name,
+          position: cat.position,
+          channels: catChannels,
+          channelsCount: catChannels.length,
+          isCollapsed: Boolean(this.collapsedCategories[cat.id]),
+        };
+      });
+
+      // Каналы без категории
+      const uncategorized = allFiltered.filter(c => !c.categoryId || !this.channelsData?.categories?.some(cat => cat.id === c.categoryId));
+
+      return {
+        categories,
+        uncategorized,
+      };
+    },
+
+    toggleCategoryCollapse(catId) {
+      this.collapsedCategories[catId] = !this.collapsedCategories[catId];
+    },
+
+    openNewChannelModal(presetCategoryId = null) {
       this.newChannelModal = {
         open: true,
         guildId: this.getActiveGuildId() || this.guilds.main.id,
         name: '',
         type: 'text',
-        groupType: 'admin',
-        categoryId: '',
+        groupType: 'general',
+        categoryId: presetCategoryId || '',
         categoryName: '',
-        isEnforced: true,
+        isEnforced: false,
+        nsfw: false,
+        rateLimitPerUser: 0,
+        topic: '',
       };
+    },
+
+    openNewCategoryModal() {
+      this.newCategoryModal = {
+        open: true,
+        guildId: this.getActiveGuildId() || this.guilds.main.id,
+        name: '',
+        position: null,
+      };
+    },
+
+    async createCategory() {
+      if (!this.newCategoryModal.name.trim()) {
+        this.showToast('error', 'Введите название категории');
+        return;
+      }
+      try {
+        await this.apiFetch('/api/channels/category', {
+          method: 'POST',
+          body: JSON.stringify(this.newCategoryModal),
+        });
+        this.showToast('success', `Категория 📁 ${this.newCategoryModal.name} успешно создана`);
+        this.newCategoryModal.open = false;
+        await this.loadChannels();
+        await this.loadDiscordMetadata();
+      } catch (e) {
+        this.showToast('error', e.message);
+      }
     },
 
     async createChannel() {
@@ -1348,11 +1494,14 @@ document.addEventListener('alpine:init', () => {
         channelId: c.id,
         name: c.name,
         type: c.type,
-        groupType: c.groupType,
+        groupType: c.groupType || 'general',
         categoryId: c.categoryId || '',
         categoryName: c.categoryName || '',
         position: c.position || 0,
         isEnforced: Boolean(c.isEnforced),
+        nsfw: Boolean(c.nsfw),
+        rateLimitPerUser: c.rateLimitPerUser || 0,
+        topic: c.topic || '',
       };
     },
 
@@ -1371,9 +1520,25 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    async toggleChannelFlag(channelId, flag) {
+      try {
+        const gid = this.getActiveGuildId() || this.guilds.main.id;
+        const res = await this.apiFetch(`/api/channels/${channelId}/toggle-flag`, {
+          method: 'PATCH',
+          body: JSON.stringify({ guildId: gid, flag }),
+        });
+        const state = res.result?.state;
+        const flagLabels = { isEnforced: 'Защита Root', nsfw: 'NSFW' };
+        this.showToast('success', `${flagLabels[flag] || flag}: ${state ? 'ВКЛЮЧЕН' : 'ВЫКЛЮЧЕН'}`);
+        await this.loadChannels();
+      } catch (e) {
+        this.showToast('error', e.message);
+      }
+    },
+
     async deleteChannel(channelId, channelName) {
       this.openConfirm({
-        title: `Удаление канала #${channelName}`,
+        title: `Удаление #${channelName}`,
         message: `Вы действительно хотите удалить канал #${channelName}? Это действие необратимо.`,
         confirmBtnText: 'Удалить канал',
         confirmBtnClass: 'btn-danger',
@@ -1423,6 +1588,141 @@ document.addEventListener('alpine:init', () => {
             });
             this.showToast('success', 'Базовая структура успешно развернута на сервере');
             await this.loadChannels();
+            await this.loadDiscordMetadata();
+          } catch (e) {
+            this.showToast('error', e.message);
+          }
+        }
+      });
+    },
+
+    // ------------------------------------------------------------------------
+    // Методы управления ролями (Role Management)
+    // ------------------------------------------------------------------------
+    get filteredRoles() {
+      if (!this.serverRolesData) return [];
+      let list = [...this.serverRolesData];
+
+      // Поиск
+      if (this.roleSearch && this.roleSearch.trim()) {
+        const q = this.roleSearch.trim().toLowerCase();
+        list = list.filter(r => (r.name && r.name.toLowerCase().includes(q)) || (r.id && r.id.includes(q)));
+      }
+
+      // Фильтр
+      if (this.roleFilter === 'whitelist') list = list.filter(r => Boolean(r.isWhitelist));
+      else if (this.roleFilter === 'sync') list = list.filter(r => Boolean(r.isSync));
+      else if (this.roleFilter === 'admin') list = list.filter(r => Boolean(r.isAdmin));
+      else if (this.roleFilter === 'hoist') list = list.filter(r => Boolean(r.hoist));
+
+      // Сортировка
+      if (this.roleSortBy === 'hierarchy') {
+        list.sort((a, b) => b.position - a.position);
+      } else if (this.roleSortBy === 'name_asc') {
+        list.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+      } else if (this.roleSortBy === 'name_desc') {
+        list.sort((a, b) => b.name.localeCompare(a.name, 'ru'));
+      } else if (this.roleSortBy === 'members') {
+        list.sort((a, b) => (b.membersCount || 0) - (a.membersCount || 0));
+      }
+
+      return list;
+    },
+
+    openNewRoleModal() {
+      this.newRoleModal = {
+        open: true,
+        guildId: this.getActiveGuildId() || this.guilds.main.id,
+        name: '',
+        color: '#5B8DB8',
+        hoist: false,
+        mentionable: false,
+        isWhitelist: false,
+      };
+    },
+
+    async createRole() {
+      if (!this.newRoleModal.name.trim()) {
+        this.showToast('error', 'Введите название роли');
+        return;
+      }
+      try {
+        await this.apiFetch('/api/discord/roles/create', {
+          method: 'POST',
+          body: JSON.stringify(this.newRoleModal),
+        });
+        this.showToast('success', `Роль @${this.newRoleModal.name} успешно создана`);
+        this.newRoleModal.open = false;
+        await this.loadServerRoles();
+        await this.loadDiscordMetadata();
+      } catch (e) {
+        this.showToast('error', e.message);
+      }
+    },
+
+    openEditRoleModal(r) {
+      this.editRoleModal = {
+        open: true,
+        guildId: this.getActiveGuildId() || this.guilds.main.id,
+        roleId: r.id,
+        name: r.name,
+        color: r.color || '#8B93A1',
+        hoist: Boolean(r.hoist),
+        mentionable: Boolean(r.mentionable),
+        position: r.position,
+        isWhitelist: Boolean(r.isWhitelist),
+        isAdmin: Boolean(r.isAdmin),
+        managed: Boolean(r.managed),
+      };
+    },
+
+    async saveEditRole() {
+      try {
+        await this.apiFetch(`/api/discord/roles/${this.editRoleModal.roleId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(this.editRoleModal),
+        });
+        this.showToast('success', 'Роль успешно обновлена');
+        this.editRoleModal.open = false;
+        await this.loadServerRoles();
+        await this.loadDiscordMetadata();
+      } catch (e) {
+        this.showToast('error', e.message);
+      }
+    },
+
+    async toggleRoleFlag(roleId, flag) {
+      try {
+        const gid = this.getActiveGuildId() || this.guilds.main.id;
+        const res = await this.apiFetch(`/api/discord/roles/${roleId}/toggle-flag`, {
+          method: 'POST',
+          body: JSON.stringify({ guildId: gid, flag }),
+        });
+        const labels = {
+          whitelist: '🛡️ Доверенная (Whitelist)',
+          hoist: '👥 Показывать отдельно (Hoist)',
+          mentionable: '🔔 Разрешено упоминание (@роль)'
+        };
+        this.showToast('success', `${labels[flag] || flag}: ${res.state ? 'ВКЛЮЧЕН' : 'ВЫКЛЮЧЕН'}`);
+        await this.loadServerRoles();
+        await this.loadDiscordMetadata();
+      } catch (e) {
+        this.showToast('error', e.message);
+      }
+    },
+
+    async deleteRole(roleId, roleName) {
+      this.openConfirm({
+        title: `Удаление роли @${roleName}`,
+        message: `Вы действительно хотите удалить роль @${roleName}? Это действие необратимо.`,
+        confirmBtnText: 'Удалить роль',
+        confirmBtnClass: 'btn-danger',
+        onConfirm: async () => {
+          try {
+            const gid = this.getActiveGuildId() || this.guilds.main.id;
+            await this.apiFetch(`/api/discord/roles/${roleId}?guildId=${gid}`, { method: 'DELETE' });
+            this.showToast('success', `Роль @${roleName} удалена`);
+            await this.loadServerRoles();
             await this.loadDiscordMetadata();
           } catch (e) {
             this.showToast('error', e.message);

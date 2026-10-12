@@ -22,6 +22,7 @@ const BotManagerModule = require('./modules/botmanager');
 const SupervisorModule = require('./modules/supervisor');
 const BackupModule = require('./modules/backup');
 const ChannelsModule = require('./modules/channels');
+const ModerationModule = require('./modules/moderation');
 
 // Веб-панель
 const { createWebServer } = require('./web/server');
@@ -51,6 +52,7 @@ async function bootstrap() {
   const supervisorModule = new SupervisorModule(client, logger, loggingModule, botManagerModule);
   const backupModule = new BackupModule(client, logger, loggingModule);
   const channelsModule = new ChannelsModule(client, logger, loggingModule);
+  const moderationModule = new ModerationModule(client, logger, loggingModule);
 
   // Привязка модулей к клиенту для прямого доступа из команд и роутов веб-панели
   client.modules = {
@@ -62,6 +64,7 @@ async function bootstrap() {
     supervisor: supervisorModule,
     backup: backupModule,
     channels: channelsModule,
+    moderation: moderationModule,
   };
 
   // Запуск фоновых таймеров модулей
@@ -70,6 +73,7 @@ async function bootstrap() {
   backupModule.init();
   channelsModule.init();
   economyModule.init();
+  moderationModule.init();
 
   // 4. Загрузка команд и событий бота
   logger.info('[Bot] Загрузка слэш-команд и обработчиков событий...');

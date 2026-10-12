@@ -35,18 +35,18 @@ router.get('/', canView, (req, res) => {
       };
     }
 
-    if (bot.name === 'guard' || bot.type === 'guard') {
-      const hb = botsRepo.getLatestHeartbeat('guard');
-      const guardId = bot.client_id || '1558816485760303136';
-      const m1 = staffGuild?.members?.cache?.get(guardId);
-      const m2 = mainGuild?.members?.cache?.get(guardId);
+    if (bot.name === 'guard' || bot.name === 'warden' || bot.type === 'guard') {
+      const hb = botsRepo.getLatestHeartbeat(bot.name) || botsRepo.getLatestHeartbeat('guard');
+      const botId = bot.client_id || '1558816485760303136';
+      const m1 = staffGuild?.members?.cache?.get(botId);
+      const m2 = mainGuild?.members?.cache?.get(botId);
       const isRecent = hb && (Date.now() - new Date(hb.created_at).getTime()) < 120000;
       const isMemberOnline = ['online', 'idle', 'dnd'].includes(m1?.presence?.status || m2?.presence?.status);
       const isOnline = isRecent || isMemberOnline || Boolean(m1 || m2);
 
       return {
         ...bot,
-        bot_type: 'Guard (Security)',
+        bot_type: bot.name === 'warden' ? 'Warden (Moderation)' : 'Guard (Security)',
         status: isOnline ? 'online' : 'offline',
         ping_ms: hb?.ping_ms ?? (client?.ws?.ping >= 0 ? client.ws.ping + 4 : 14),
         ram_usage_mb: hb?.ram_mb ?? 64.2,

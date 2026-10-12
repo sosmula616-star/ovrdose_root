@@ -3,7 +3,9 @@
  */
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
-const { system: systemRepo, economy: ecoRepo } = require('@root-core/db');
+const { system: systemRepo, economy: ecoRepo, moderation: modRepo } = require('@root-core/db');
+const { checkPermission } = require('../commands');
+const { buildModeratorPanel } = require('../commands/gg');
 
 module.exports = {
   name: 'interactionCreate',
@@ -249,8 +251,134 @@ module.exports = {
         }
       }
 
+      // 5. Обработка кнопок панели модератора /gg
+      if (interaction.isButton() && interaction.customId.startsWith('gg_')) {
+        if (!checkPermission(interaction, 'staff')) {
+          return interaction.reply({ content: '❌ У вас нет прав модератора для выполнения этого действия.', ephemeral: true });
+        }
+
+        const customId = interaction.customId;
+        const moderation = client.modules.moderation;
+        const guild = interaction.guild;
+
+        // Извлекаем userId нарушителя
+        const lastUnderscore = customId.lastIndexOf('_');
+        const targetUserId = customId.substring(lastUnderscore + 1);
+        const actionPrefix = customId.substring(0, lastUnderscore);
+
+        // Информационные кнопки (Аватар, История ников, История наказаний)
+        if (actionPrefix === 'gg_avatar') {
+          const targetUser = await client.users.fetch(targetUserId).catch(() => null);
+          if (!targetUser) return interaction.reply({ content: '❌ Пользователь не найден.', ephemeral: true });
+
+          const avatarUrl = targetUser.displayAvatarURL({ dynamic: true, size: 4096, extension: 'png' });
+          const avatarEmbed = new EmbedBuilder()
+            .setTitle(`🖼️ Полноразмерный аватар: ${targetUser.tag} (4096px)`)
+            .setImage(avatarUrl)
+            .setColor(0x5B8DB8)
+            .setFooter({ text: `ID: ${targetUser.id}` });
+
+          const avatarRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setLabel('Открыть в браузере').setURL(avatarUrl).setStyle(ButtonStyle.Link)
+          );
+
+          return interaction.reply({ embeds: [avatarEmbed], components: [avatarRow], ephemeral: true });
+        }
+
+        if (actionPrefix === 'gg_hist_nicks') {
+          const targetUser = await client.users.fetch(targetUserId).catch(() => null);
+          const history = modRepo.getNicknameHistory(guild.id, targetUserId, 20);
+
+          let desc = 'История смены никнеймов пуста или ник не менялся.';
+          if (history && history.length > 0) {
+            desc = history.map(h => {
+              const unix = Math.floor(new Date(h.created_at).getTime() / 1000);
+              const oldN = h.old_nickname ? `\`${h.old_nickname}\`` : '*[Без ника]*';
+              const newN = h.new_nickname ? `**\`${h.new_nickname}\`**` : '*[Сброшен]*';
+              return `• <t:${unix}:d> <t:${unix}:t> : ${oldN} ➔ ${newN}`;
+            }).join('\n');
+          }
+
+          const nicksEmbed = new EmbedBuilder()
+            .setTitle(`🏷️ История смены ников: ${targetUser?.tag || targetUserId}`)
+            .setDescription(desc)
+            .setColor(0x5B8DB8)
+            .setFooter({ text: `Всего записей: ${history.length}` })
+            .setTimestamp();
+
+          return interaction.reply({ embeds: [nicksEmbed], ephemeral: true });
+        }
+
+        if (actionPrefix === 'gg_hist_punish') {
+          const targetUser = await client.users.fetch(targetUserId).catch(() => null);
+          const hist = modRepo.getUserHistory(guild.id, targetUserId);
+          const activeTimed = modRepo.getActiveTimedWarns(guild.id, targetUserId);
+
+          let desc = '';
+          if (hist.cases && hist.cases.length > 0) {
+            desc = hist.cases.slice(0, 15).map(c => {
+              const unix = Math.floor(new Date(c.created_at).getTime() / 1000);
+              return `• **Case #${c.case_number} [${(c.action || c.type || '').toUpperCase()}]**: ${c.reason || 'Без причины'} (<@${c.moderator_id}>) • <t:${unix}:R>`;
+            }).join('\n');
+          } else {
+            desc = 'Нарушений не зафиксировано.';
+          }
+
+          const punishEmbed = new EmbedBuilder()
+            .setTitle(`📋 История наказаний: ${targetUser?.tag || targetUserId}`)
+            .setDescription(`Всего кейсов: **${hist.cases.length}** | Активных варнов: **${activeTimed.length}**\n\n${desc}`)
+            .setColor(0xE74C3C)
+            .setFooter({ text: `ID: ${targetUserId}` })
+            .setTimestamp();
+
+          return interaction.reply({ embeds: [punishEmbed], ephemeral: true });
+        }
+
+        // Действия над участником
+        const member = await guild.members.fetch(targetUserId).catch(() => null);
+        if (!member) {
+          return interaction.reply({ content: '❌ Участник не найден на сервере.', ephemeral: true });
+        }
+
+        const modUser = interaction.user;
+
+        if (actionPrefix === 'gg_mute_text') {
+          await moderation.applyMute(guild, member, modUser, 'text', 'Выдано через /gg');
+        } else if (actionPrefix === 'gg_mute_voice') {
+          await moderation.applyMute(guild, member, modUser, 'voice', 'Выдано через /gg');
+        } else if (actionPrefix === 'gg_mute_both') {
+          await moderation.applyMute(guild, member, modUser, 'both', 'Выдано через /gg');
+        } else if (actionPrefix === 'gg_iso') {
+          await moderation.applyIsolation(guild, member, modUser, 'Выдано через /gg');
+        } else if (actionPrefix === 'gg_warn_1') {
+          await moderation.applyTimedWarn(guild, member, modUser, 1, 'Выдано через /gg (1 час)');
+        } else if (actionPrefix === 'gg_warn_3') {
+          await moderation.applyTimedWarn(guild, member, modUser, 3, 'Выдано через /gg (3 часа)');
+        } else if (actionPrefix === 'gg_warn_6') {
+          await moderation.applyTimedWarn(guild, member, modUser, 6, 'Выдано через /gg (6 часов)');
+        } else if (actionPrefix === 'gg_unmute') {
+          await moderation.removeMute(guild, member, modUser, 'all', 'Снято через /gg');
+        } else if (actionPrefix === 'gg_unwarn') {
+          await moderation.removeWarns(guild, member, modUser, 'Снято через /gg');
+        } else if (actionPrefix === 'gg_uniso') {
+          await moderation.removeIsolation(guild, member, modUser, 'Снято через /gg');
+        } else if (actionPrefix === 'gg_gender_m') {
+          await moderation.setGender(guild, member, 'male', modUser);
+        } else if (actionPrefix === 'gg_gender_f') {
+          await moderation.setGender(guild, member, 'female', modUser);
+        } else if (actionPrefix === 'gg_gender_none') {
+          await moderation.setGender(guild, member, 'none', modUser);
+        }
+
+        // Мгновенное обновление панели в сообщении
+        const updatedMember = await guild.members.fetch(targetUserId).catch(() => member);
+        const updatedPayload = await buildModeratorPanel(guild, updatedMember);
+        return interaction.update(updatedPayload);
+      }
+
     } catch (err) {
       logger.error(`[Interaction] Ошибка обработки: ${err.message}`);
     }
+
   }
 };

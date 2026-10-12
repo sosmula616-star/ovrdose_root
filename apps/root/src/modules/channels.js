@@ -158,10 +158,12 @@ class ChannelsModule {
       if (!c) continue;
 
       if (c.type === ChannelType.GuildCategory) {
+        const channelsInCategory = Array.from(discordChannels.values()).filter(ch => ch && ch.parentId === c.id);
         categories.push({
           id: c.id,
           name: c.name,
           position: c.position,
+          channelsCount: channelsInCategory.length,
         });
       } else {
         const managed = managedMap.get(c.id);
@@ -182,6 +184,9 @@ class ChannelsModule {
           groupType: managed ? managed.group_type : 'general',
           isEnforced: managed ? Boolean(managed.is_enforced) : false,
           managedId: managed ? managed.id : null,
+          nsfw: Boolean(c.nsfw),
+          rateLimitPerUser: c.rateLimitPerUser || 0,
+          topic: c.topic || '',
         });
       }
     }
@@ -207,7 +212,7 @@ class ChannelsModule {
   /**
    * Создание канала ТОЛЬКО через веб-панель
    */
-  async createChannelViaPanel(guildId, { name, type = 'text', groupType = 'general', categoryId = null, categoryName = null, isEnforced = 1 }) {
+  async createChannelViaPanel(guildId, { name, type = 'text', groupType = 'general', categoryId = null, categoryName = null, isEnforced = 1, nsfw = false, rateLimitPerUser = 0, topic = '' }) {
     const guild = this.client.guilds.cache.get(guildId);
     if (!guild) throw new Error('Сервер не найден');
 
@@ -254,9 +259,11 @@ class ChannelsModule {
       }
     }
 
-    // Если указана категория по имени и нет ID, ищем или создаем категорию
+    // Если указана категория по имени и нет ID, ищем или создаем категорию (только если мы не создаем саму категорию!)
     let finalParentId = categoryId;
-    if (!finalParentId && categoryName && discordType !== ChannelType.GuildCategory) {
+    if (discordType === ChannelType.GuildCategory) {
+      finalParentId = null; // Категории не могут иметь родителя
+    } else if (!finalParentId && categoryName) {
       const existingCat = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === categoryName.toLowerCase());
       if (existingCat) {
         finalParentId = existingCat.id;
@@ -270,14 +277,27 @@ class ChannelsModule {
       }
     }
 
-    // Создаем канал в Discord
-    const createdChannel = await guild.channels.create({
+    // Параметры создания канала
+    const createOptions = {
       name,
       type: discordType,
-      parent: finalParentId || undefined,
-      permissionOverwrites: permissionOverwrites.length > 0 ? permissionOverwrites : undefined,
       reason: `Создано через веб-панель Root [${groupType}]`,
-    });
+    };
+
+    if (discordType !== ChannelType.GuildCategory && finalParentId) {
+      createOptions.parent = finalParentId;
+    }
+    if (discordType !== ChannelType.GuildCategory && permissionOverwrites.length > 0) {
+      createOptions.permissionOverwrites = permissionOverwrites;
+    }
+    if (discordType === ChannelType.GuildText || discordType === ChannelType.GuildAnnouncement) {
+      if (nsfw) createOptions.nsfw = Boolean(nsfw);
+      if (rateLimitPerUser) createOptions.rateLimitPerUser = Number(rateLimitPerUser);
+      if (topic) createOptions.topic = String(topic);
+    }
+
+    // Создаем канал в Discord
+    const createdChannel = await guild.channels.create(createOptions);
 
     // Регистрируем в списке разрешенных каналов панели
     this.panelCreatedChannels.add(createdChannel.id);
@@ -286,29 +306,32 @@ class ChannelsModule {
     const parentChannel = finalParentId ? guild.channels.cache.get(finalParentId) : null;
     const resolvedCategoryName = parentChannel ? parentChannel.name : categoryName;
 
-    // Сохраняем в базу данных managed_channels
-    const dbResult = channelsRepo.addManagedChannel({
-      guildId,
-      channelId: createdChannel.id,
-      name,
-      type,
-      groupType,
-      categoryName: resolvedCategoryName,
-      categoryId: finalParentId,
-      position: createdChannel.position,
-      isEnforced: isEnforced ? 1 : 0,
-    });
+    // Сохраняем в базу данных managed_channels (для обычных каналов)
+    let managedId = null;
+    if (discordType !== ChannelType.GuildCategory) {
+      const dbResult = channelsRepo.addManagedChannel({
+        guildId,
+        channelId: createdChannel.id,
+        name,
+        type,
+        groupType,
+        categoryName: resolvedCategoryName,
+        categoryId: finalParentId,
+        position: createdChannel.position,
+        isEnforced: isEnforced ? 1 : 0,
+      });
+      managedId = dbResult.lastInsertRowid;
+    }
 
     // Если это лог-канал, автоматически привязываем в settings
     if (groupType.startsWith('log_')) {
       settingsRepo.set(guildId, 'root', `log_channel_${groupType}`, createdChannel.id);
-      // Также дублируем под общий лог если нужно
       if (groupType === 'log_audit') {
         settingsRepo.set(guildId, 'root', 'log_channel_security', createdChannel.id);
       }
     }
 
-    this.logger.info(`[Channels] Создан управляемый канал #${name} (${createdChannel.id}) [${groupType}] на сервере ${guild.name}`);
+    this.logger.info(`[Channels] Создан канал/категория "${name}" (${createdChannel.id}) [${groupType}] на сервере ${guild.name}`);
     return {
       id: createdChannel.id,
       name: createdChannel.name,
@@ -316,14 +339,42 @@ class ChannelsModule {
       groupType,
       categoryId: finalParentId,
       categoryName: resolvedCategoryName,
-      managedId: dbResult.lastInsertRowid,
+      managedId,
+      nsfw: Boolean(createdChannel.nsfw),
+      rateLimitPerUser: createdChannel.rateLimitPerUser || 0,
     };
   }
 
   /**
-   * Редактирование названия, категории и позиции через хостинг
+   * Создание категории напрямую
    */
-  async editChannelViaPanel(guildId, channelId, { name, categoryId, categoryName, position, groupType, isEnforced }) {
+  async createCategoryViaPanel(guildId, { name, position = null }) {
+    const guild = this.client.guilds.cache.get(guildId);
+    if (!guild) throw new Error('Сервер не найден');
+
+    const createOptions = {
+      name: name.trim(),
+      type: ChannelType.GuildCategory,
+      reason: 'Создание категории через веб-панель Root',
+    };
+    if (position !== null && position !== undefined) {
+      createOptions.position = Number(position);
+    }
+
+    const createdCat = await guild.channels.create(createOptions);
+    this.panelCreatedChannels.add(createdCat.id);
+    this.logger.info(`[Channels] Создана категория "${createdCat.name}" (${createdCat.id}) на сервере ${guild.name}`);
+    return {
+      id: createdCat.id,
+      name: createdCat.name,
+      position: createdCat.position,
+    };
+  }
+
+  /**
+   * Редактирование названия, категории, флагов и позиции через хостинг
+   */
+  async editChannelViaPanel(guildId, channelId, { name, categoryId, categoryName, position, groupType, isEnforced, nsfw, rateLimitPerUser, topic }) {
     const guild = this.client.guilds.cache.get(guildId);
     if (!guild) throw new Error('Сервер не найден');
 
@@ -336,7 +387,7 @@ class ChannelsModule {
       updates.name = name;
     }
 
-    if (categoryId !== undefined && categoryId !== channel.parentId) {
+    if (categoryId !== undefined && categoryId !== channel.parentId && channel.type !== ChannelType.GuildCategory) {
       await channel.setParent(categoryId || null, { lockPermissions: false });
       updates.categoryId = categoryId;
       const parent = categoryId ? guild.channels.cache.get(categoryId) : null;
@@ -344,33 +395,94 @@ class ChannelsModule {
     }
 
     if (position !== undefined && position !== channel.position) {
-      await channel.setPosition(position);
-      updates.position = position;
+      await channel.setPosition(Number(position));
+      updates.position = Number(position);
+    }
+
+    if (nsfw !== undefined && channel.setNSFW && channel.nsfw !== Boolean(nsfw)) {
+      await channel.setNSFW(Boolean(nsfw), 'Обновление флага NSFW через веб-панель Root');
+      updates.nsfw = Boolean(nsfw);
+    }
+
+    if (rateLimitPerUser !== undefined && channel.setRateLimitPerUser && channel.rateLimitPerUser !== Number(rateLimitPerUser)) {
+      await channel.setRateLimitPerUser(Number(rateLimitPerUser), 'Обновление Slowmode через веб-панель Root');
+      updates.rateLimitPerUser = Number(rateLimitPerUser);
+    }
+
+    if (topic !== undefined && channel.setTopic && channel.topic !== topic) {
+      await channel.setTopic(String(topic), 'Обновление описания через веб-панель Root');
+      updates.topic = String(topic);
     }
 
     if (groupType !== undefined) updates.groupType = groupType;
     if (isEnforced !== undefined) updates.isEnforced = isEnforced ? 1 : 0;
 
-    // Обновляем запись в БД
-    const managed = channelsRepo.getByChannelId(guildId, channelId);
-    if (managed) {
-      channelsRepo.updateManagedChannel(managed.id, updates);
-    } else {
-      channelsRepo.addManagedChannel({
-        guildId,
-        channelId,
-        name: updates.name || channel.name,
-        type: channel.isVoiceBased() ? 'voice' : 'text',
-        groupType: updates.groupType || 'general',
-        categoryName: updates.categoryName,
-        categoryId: updates.categoryId || channel.parentId,
-        position: updates.position || channel.position,
-        isEnforced: updates.isEnforced !== undefined ? updates.isEnforced : 1,
-      });
+    // Обновляем запись в БД если это не категория
+    if (channel.type !== ChannelType.GuildCategory) {
+      const managed = channelsRepo.getByChannelId(guildId, channelId);
+      if (managed) {
+        channelsRepo.updateManagedChannel(managed.id, updates);
+      } else {
+        channelsRepo.addManagedChannel({
+          guildId,
+          channelId,
+          name: updates.name || channel.name,
+          type: channel.isVoiceBased() ? 'voice' : 'text',
+          groupType: updates.groupType || 'general',
+          categoryName: updates.categoryName,
+          categoryId: updates.categoryId || channel.parentId,
+          position: updates.position !== undefined ? updates.position : channel.position,
+          isEnforced: updates.isEnforced !== undefined ? updates.isEnforced : 1,
+        });
+      }
     }
 
     this.logger.info(`[Channels] Канал #${channel.name} успешно обновлен через веб-панель`);
     return { ok: true, updates };
+  }
+
+  /**
+   * Быстрое переключение флага канала (isEnforced, nsfw, etc.)
+   */
+  async toggleChannelFlag(guildId, channelId, flag) {
+    const guild = this.client.guilds.cache.get(guildId);
+    if (!guild) throw new Error('Сервер не найден');
+
+    const channel = guild.channels.cache.get(channelId);
+    if (!channel) throw new Error('Канал не найден');
+
+    let resultState;
+    if (flag === 'isEnforced') {
+      const managed = channelsRepo.getByChannelId(guildId, channelId);
+      if (managed) {
+        resultState = managed.is_enforced ? 0 : 1;
+        channelsRepo.updateManagedChannel(managed.id, { isEnforced: resultState });
+      } else {
+        resultState = 1;
+        channelsRepo.addManagedChannel({
+          guildId,
+          channelId,
+          name: channel.name,
+          type: channel.isVoiceBased() ? 'voice' : 'text',
+          groupType: 'general',
+          categoryName: channel.parent?.name || null,
+          categoryId: channel.parentId || null,
+          position: channel.position,
+          isEnforced: 1,
+        });
+      }
+    } else if (flag === 'nsfw') {
+      if (channel.setNSFW) {
+        resultState = !channel.nsfw;
+        await channel.setNSFW(resultState, 'Переключение NSFW через веб-панель Root');
+      } else {
+        throw new Error('Данный тип канала не поддерживает флаг NSFW');
+      }
+    } else {
+      throw new Error(`Неизвестный флаг канала: ${flag}`);
+    }
+
+    return { flag, state: resultState };
   }
 
   /**

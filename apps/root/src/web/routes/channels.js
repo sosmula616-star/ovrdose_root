@@ -32,7 +32,7 @@ router.get('/', canView, async (req, res, next) => {
  */
 router.post('/create', canEdit, async (req, res, next) => {
   try {
-    const { guildId, name, type = 'text', groupType = 'general', categoryId = null, categoryName = null, isEnforced = 1 } = req.body;
+    const { guildId, name, type = 'text', groupType = 'general', categoryId = null, categoryName = null, isEnforced = 1, nsfw = false, rateLimitPerUser = 0, topic = '' } = req.body;
     const targetGuildId = guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';
     const channelsModule = req.app.locals.client?.modules?.channels;
 
@@ -51,6 +51,9 @@ router.post('/create', canEdit, async (req, res, next) => {
       categoryId,
       categoryName,
       isEnforced: isEnforced ? 1 : 0,
+      nsfw,
+      rateLimitPerUser,
+      topic,
     });
 
     recordAudit(req, `Создан канал #${name} [${groupType}] на сервере`, 'channels', {
@@ -65,12 +68,73 @@ router.post('/create', canEdit, async (req, res, next) => {
 });
 
 /**
+ * Создание категории (ТОЛЬКО через веб-панель)
+ */
+router.post('/category', canEdit, async (req, res, next) => {
+  try {
+    const { guildId, name, position = null } = req.body;
+    const targetGuildId = guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';
+    const channelsModule = req.app.locals.client?.modules?.channels;
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'Название категории обязательно' });
+    }
+
+    if (!channelsModule) {
+      return res.status(503).json({ error: 'Модуль каналов недоступен' });
+    }
+
+    const result = await channelsModule.createCategoryViaPanel(targetGuildId, {
+      name: name.trim(),
+      position,
+    });
+
+    recordAudit(req, `Создана категория 📁 ${name.trim()} на сервере`, 'channels', {
+      targetId: result.id,
+      newValue: req.body,
+    });
+
+    res.json({ ok: true, category: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Быстрое переключение флага канала (isEnforced, nsfw)
+ */
+router.patch('/:id/toggle-flag', canEdit, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { guildId, flag } = req.body;
+    const targetGuildId = guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';
+    const channelsModule = req.app.locals.client?.modules?.channels;
+
+    if (!channelsModule) {
+      return res.status(503).json({ error: 'Модуль каналов недоступен' });
+    }
+
+    const result = await channelsModule.toggleChannelFlag(targetGuildId, id, flag);
+
+    recordAudit(req, `Переключен флаг ${flag} канала ID: ${id}`, 'channels', {
+      targetId: id,
+      flag,
+      result,
+    });
+
+    res.json({ ok: true, result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * Редактирование названия, категории или параметров канала
  */
 router.patch('/:id', canEdit, async (req, res, next) => {
   try {
     const { id } = req.params; // discord channel id
-    const { guildId, name, categoryId, categoryName, position, groupType, isEnforced } = req.body;
+    const { guildId, name, categoryId, categoryName, position, groupType, isEnforced, nsfw, rateLimitPerUser, topic } = req.body;
     const targetGuildId = guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';
     const channelsModule = req.app.locals.client?.modules?.channels;
 
@@ -85,6 +149,9 @@ router.patch('/:id', canEdit, async (req, res, next) => {
       position,
       groupType,
       isEnforced,
+      nsfw,
+      rateLimitPerUser,
+      topic,
     });
 
     recordAudit(req, `Обновлен канал #${name || id}`, 'channels', {

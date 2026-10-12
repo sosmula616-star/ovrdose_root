@@ -101,6 +101,7 @@ function seedDefaults(database = null) {
   `);
   insertBot.run('root', 'internal', process.env.DISCORD_CLIENT_ID_ROOT || '1558812630368522300', 'Ядро системы, синхронизация и супервизор', 'root-core-root');
   insertBot.run('guard', 'external', process.env.GUARD_CLIENT_ID || '1558816485760303136', 'Внешний бот модерации и безопасности', 'root-core-guard');
+  insertBot.run('warden', 'external', process.env.GUARD_CLIENT_ID || '1558816485760303136', 'Бот модерации Warden (/act, жалобы, веб-панель mod.ovrdose.bothost.tech)', 'root-moderator-bot');
 
   // Привязка ботов к серверам
   const insertBotServer = targetDb.prepare(`
@@ -111,6 +112,8 @@ function seedDefaults(database = null) {
   insertBotServer.run('root', mainGuild);
   insertBotServer.run('guard', staffGuild);
   insertBotServer.run('guard', mainGuild);
+  insertBotServer.run('warden', staffGuild);
+  insertBotServer.run('warden', mainGuild);
 
   // Регистрация владельца в панели (если задан)
   const ownerIds = (process.env.OWNER_IDS || '').split(',').map(s => s.trim()).filter(Boolean);

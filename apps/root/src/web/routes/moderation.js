@@ -31,12 +31,23 @@ const handleUserHistory = (req, res) => {
   const cases = modRepo.getCases({ guildId, targetId: userId, limit: 50 }).items;
   const notes = modRepo.getNotes(guildId, userId);
   const activeWarns = modRepo.getActiveWarnsCount(guildId, userId);
+  const nicknameHistory = modRepo.getNicknameHistory(guildId, userId, 25);
+  const timedWarns = modRepo.getActiveTimedWarns(guildId, userId);
 
-  res.json({ cases, notes, activeWarns });
+  res.json({ cases, notes, activeWarns, nicknameHistory, timedWarns });
 };
 
 router.get('/users/:userId/history', canView, handleUserHistory);
 router.get('/history/:userId', canView, handleUserHistory);
+
+// История изменения никнеймов
+router.get('/users/:userId/nicknames', canView, (req, res) => {
+  const { userId } = req.params;
+  const { guildId, limit = 50 } = req.query;
+  const targetGuild = guildId || process.env.MAIN_GUILD_ID || '1558606862277017690';
+  const history = modRepo.getNicknameHistory(targetGuild, userId, Number(limit));
+  res.json({ userId, guildId: targetGuild, history });
+});
 
 // Выдача наказания (поддерживает и /punish, и /action)
 const handlePunish = async (req, res) => {
@@ -67,36 +78,80 @@ const handlePunish = async (req, res) => {
   const moderatorId = req.session?.user?.discord_id || 'system';
   const moderatorTag = req.session?.user?.discord_tag || 'System';
 
-  try {
-    const caseRecord = modRepo.createCase({
-      guildId: targetGuild,
-      type: modType,
-      targetId: finalUserId,
-      moderatorId,
-      moderatorTag,
-      reason: reason || 'Без указания причины',
-      duration: durationSec,
-      expiresAt,
-    });
+  const modService = client?.modules?.moderation;
+  const modUserObj = { id: moderatorId, tag: moderatorTag };
 
-    if (modType === 'warn') {
-      modRepo.addWarn(targetGuild, finalUserId, moderatorId, reason, caseRecord.caseId);
-    } else if (modType === 'mute') {
-      modRepo.addMute(targetGuild, finalUserId, moderatorId, muteType, reason, durationSec, expiresAt, caseRecord.caseId);
-      if (guild) {
-        const member = await guild.members.fetch(finalUserId).catch(() => null);
-        if (member) {
-          await member.timeout(durationSec ? durationSec * 1000 : 28 * 24 * 3600 * 1000, reason).catch(() => {});
+  try {
+    let resultCaseNumber = null;
+
+    if (guild && modService) {
+      const member = await guild.members.fetch(finalUserId).catch(() => null);
+
+      if (member) {
+        if (rawAction === 'warn_1h') {
+          const res = await modService.applyTimedWarn(guild, member, modUserObj, 1, reason || 'Предупреждение 1 час');
+          resultCaseNumber = res.caseNumber;
+        } else if (rawAction === 'warn_3h') {
+          const res = await modService.applyTimedWarn(guild, member, modUserObj, 3, reason || 'Предупреждение 3 часа');
+          resultCaseNumber = res.caseNumber;
+        } else if (rawAction === 'warn_6h') {
+          const res = await modService.applyTimedWarn(guild, member, modUserObj, 6, reason || 'Предупреждение 6 часов');
+          resultCaseNumber = res.caseNumber;
+        } else if (rawAction === 'mute_text') {
+          const res = await modService.applyMute(guild, member, modUserObj, 'text', reason || 'Текстовый мут');
+          resultCaseNumber = res.caseNumber;
+        } else if (rawAction === 'mute_voice') {
+          const res = await modService.applyMute(guild, member, modUserObj, 'voice', reason || 'Голосовой мут');
+          resultCaseNumber = res.caseNumber;
+        } else if (rawAction === 'mute_both' || rawAction === 'mute') {
+          const res = await modService.applyMute(guild, member, modUserObj, 'both', reason || 'Полный мут');
+          resultCaseNumber = res.caseNumber;
+        } else if (rawAction === 'isolation') {
+          const res = await modService.applyIsolation(guild, member, modUserObj, reason || 'Изоляция (только #апелляции)');
+          resultCaseNumber = res.caseNumber;
+        } else if (rawAction === 'kick') {
+          await member.kick(reason || 'Кик через панель');
+          const caseRecord = modRepo.createCase({
+            guildId: targetGuild,
+            type: 'kick',
+            targetId: finalUserId,
+            moderatorId,
+            moderatorTag,
+            reason: reason || 'Кик через панель',
+          });
+          resultCaseNumber = caseRecord.caseNumber;
+        } else if (rawAction === 'ban') {
+          await guild.members.ban(finalUserId, { reason: reason || 'Бан через панель' });
+          const caseRecord = modRepo.createCase({
+            guildId: targetGuild,
+            type: 'ban',
+            targetId: finalUserId,
+            moderatorId,
+            moderatorTag,
+            reason: reason || 'Бан через панель',
+          });
+          resultCaseNumber = caseRecord.caseNumber;
         }
-      }
-    } else if (modType === 'ban') {
-      if (guild) {
-        await guild.members.ban(finalUserId, { reason }).catch(() => {});
       }
     }
 
-    recordAudit(req, `Выдано наказание [${rawAction}] #${caseRecord.caseNumber} для ${finalUserId}`, 'moderation', { newValue: req.body });
-    res.json({ ok: true, caseNumber: caseRecord.caseNumber });
+    if (!resultCaseNumber) {
+      // Fallback
+      const caseRecord = modRepo.createCase({
+        guildId: targetGuild,
+        type: rawAction.startsWith('warn') ? 'warn' : (rawAction.startsWith('mute') ? 'mute' : rawAction),
+        targetId: finalUserId,
+        moderatorId,
+        moderatorTag,
+        reason: reason || 'Без указания причины',
+        duration: durationSec,
+        expiresAt,
+      });
+      resultCaseNumber = caseRecord.caseNumber;
+    }
+
+    recordAudit(req, `Выдано наказание [${rawAction}] #${resultCaseNumber} для ${finalUserId}`, 'moderation', { newValue: req.body });
+    res.json({ ok: true, caseNumber: resultCaseNumber });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

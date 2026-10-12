@@ -40,8 +40,16 @@ module.exports = {
           });
         }
 
-        // Логирование смены ника
+        // Логирование и сохранение смены ника
         if (oldMember.nickname !== newMember.nickname) {
+          const { moderation: modRepo } = require('@root-core/db');
+          modRepo.addNicknameHistory(
+            newMember.guild.id,
+            newMember.id,
+            oldMember.nickname || oldMember.user.username,
+            newMember.nickname || newMember.user.username
+          );
+
           await client.modules.logging.logAuditEvent({
             guildId: newMember.guild.id,
             action: 'nick',
