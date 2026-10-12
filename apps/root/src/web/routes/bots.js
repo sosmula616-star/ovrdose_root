@@ -11,7 +11,7 @@ const { broadcastBotEvent } = require('./events');
 /**
  * Список всех ботов с динамическими показателями статуса, ping, RAM и uptime
  */
-router.get('/', canView, (req, res) => {
+router.get('/', canView, async (req, res) => {
   const client = req.app.locals.client;
   const staffGuildId = process.env.STAFF_GUILD_ID || '1558608015148716062';
   const mainGuildId  = process.env.MAIN_GUILD_ID  || '1558606862277017690';
@@ -20,7 +20,7 @@ router.get('/', canView, (req, res) => {
 
   const rawBots = botsRepo.getAllBots();
 
-  const enrichedBots = rawBots.map(bot => {
+  const enrichedBots = await Promise.all(rawBots.map(async bot => {
     if (bot.name === 'root') {
       const isOnline = client?.isReady();
       const ram = (process.memoryUsage().rss / (1024 * 1024)).toFixed(1);
@@ -36,10 +36,12 @@ router.get('/', canView, (req, res) => {
     }
 
     if (bot.name === 'guard' || bot.name === 'warden' || bot.type === 'guard') {
-      const hb = botsRepo.getLatestHeartbeat(bot.name) || botsRepo.getLatestHeartbeat('guard');
+      const hb = botsRepo.getLatestHeartbeat(bot.name) || botsRepo.getLatestHeartbeat('guard') || botsRepo.getLatestHeartbeat('warden');
       const botId = bot.client_id || '1558816485760303136';
-      const m1 = staffGuild?.members?.cache?.get(botId);
-      const m2 = mainGuild?.members?.cache?.get(botId);
+      let m1 = staffGuild?.members?.cache?.get(botId);
+      let m2 = mainGuild?.members?.cache?.get(botId);
+      if (!m1 && staffGuild) m1 = await staffGuild.members.fetch(botId).catch(() => null);
+      if (!m2 && mainGuild)  m2 = await mainGuild.members.fetch(botId).catch(() => null);
       const isRecent = hb && (Date.now() - new Date(hb.created_at).getTime()) < 120000;
       const isMemberOnline = ['online', 'idle', 'dnd'].includes(m1?.presence?.status || m2?.presence?.status);
       const isOnline = isRecent || isMemberOnline || Boolean(m1 || m2);
@@ -66,7 +68,7 @@ router.get('/', canView, (req, res) => {
       uptime_sec: hb?.uptime_sec ?? 0,
       servers: 'Staff, Main',
     };
-  });
+  }));
 
   res.json(enrichedBots);
 });

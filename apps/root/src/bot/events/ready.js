@@ -35,6 +35,12 @@ module.exports = {
       log.warn(`[Bot] Не удалось обновить статус в БД: ${e.message}`);
     }
 
+    // Предварительный кэш участников ботов Warden / Guard
+    const wardenId = process.env.GUARD_CLIENT_ID || '1558816485760303136';
+    for (const guild of botClient.guilds.cache.values()) {
+      guild.members.fetch(wardenId).catch(() => null);
+    }
+
     // Регистрация слэш-команд на серверах Staff и Main
     await registerCommands(botClient, log);
   }

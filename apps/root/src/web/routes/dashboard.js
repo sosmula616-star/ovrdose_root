@@ -14,7 +14,7 @@ router.get('/', canView, async (req, res) => {
   const mainGuild  = client?.guilds?.cache?.get(mainGuildId);
 
   const allBots = botsRepo.getAllBots();
-  const botsData = allBots.map(b => {
+  const botsData = await Promise.all(allBots.map(async b => {
     if (b.name === 'root') {
       const isOnline = client?.isReady();
       const ram = (process.memoryUsage().rss / (1024 * 1024)).toFixed(1);
@@ -29,19 +29,25 @@ router.get('/', canView, async (req, res) => {
         servers: 'Staff, Main',
       };
     }
-    if (b.name === 'guard' || b.type === 'guard') {
-      const hb = botsRepo.getLatestHeartbeat('guard');
-      const guardId = b.client_id || '1558816485760303136';
-      const m1 = staffGuild?.members?.cache?.get(guardId);
-      const m2 = mainGuild?.members?.cache?.get(guardId);
+    if (b.name === 'guard' || b.name === 'warden' || b.type === 'guard') {
+      const hb = botsRepo.getLatestHeartbeat(b.name) || botsRepo.getLatestHeartbeat('guard') || botsRepo.getLatestHeartbeat('warden');
+      const botId = b.client_id || '1558816485760303136';
+      let m1 = staffGuild?.members?.cache?.get(botId);
+      let m2 = mainGuild?.members?.cache?.get(botId);
+      if (!m1 && staffGuild) {
+        m1 = await staffGuild.members.fetch(botId).catch(() => null);
+      }
+      if (!m2 && mainGuild) {
+        m2 = await mainGuild.members.fetch(botId).catch(() => null);
+      }
       const isRecent = hb && (Date.now() - new Date(hb.created_at).getTime()) < 120000;
       const isMemberOnline = ['online', 'idle', 'dnd'].includes(m1?.presence?.status || m2?.presence?.status);
-      const isOnline = isRecent || isMemberOnline || (m1 || m2);
+      const isOnline = isRecent || isMemberOnline || Boolean(m1 || m2);
 
       return {
         ...b,
-        name: 'guard',
-        bot_type: 'Guard (Security)',
+        name: b.name,
+        bot_type: b.name === 'warden' ? 'Warden (Moderation)' : 'Guard (Security)',
         status: isOnline ? 'online' : 'offline',
         ping_ms: hb?.ping_ms ?? (client?.ws?.ping >= 0 ? client.ws.ping + 4 : 15),
         ram_usage_mb: hb?.ram_mb ?? 62.4,
@@ -59,7 +65,7 @@ router.get('/', canView, async (req, res) => {
       uptime_sec: hb?.uptime_sec ?? 0,
       servers: 'Staff, Main',
     };
-  });
+  }));
 
   const activeMutes = modRepo.getActiveMutes().length;
   const incidents = antinukeRepo.getIncidents(null, 5).items;
@@ -85,7 +91,7 @@ router.get('/stats', canView, async (req, res) => {
   const mainGuild  = client?.guilds?.cache?.get(process.env.MAIN_GUILD_ID  || '1558606862277017690');
 
   const allBots = botsRepo.getAllBots();
-  const botsData = allBots.map(b => {
+  const botsData = await Promise.all(allBots.map(async b => {
     if (b.name === 'root') {
       const ram = (process.memoryUsage().rss / (1024 * 1024)).toFixed(1);
       return {
@@ -95,6 +101,26 @@ router.get('/stats', canView, async (req, res) => {
         ping: client?.ws?.ping >= 0 ? client.ws.ping : 0,
         ram: parseFloat(ram),
         uptime: Math.floor(process.uptime()),
+        version: b.version || '1.0.0',
+      };
+    }
+    if (b.name === 'guard' || b.name === 'warden' || b.type === 'guard') {
+      const hb = botsRepo.getLatestHeartbeat(b.name) || botsRepo.getLatestHeartbeat('guard') || botsRepo.getLatestHeartbeat('warden');
+      const botId = b.client_id || '1558816485760303136';
+      let m1 = staffGuild?.members?.cache?.get(botId);
+      let m2 = mainGuild?.members?.cache?.get(botId);
+      if (!m1 && staffGuild) m1 = await staffGuild.members.fetch(botId).catch(() => null);
+      if (!m2 && mainGuild)  m2 = await mainGuild.members.fetch(botId).catch(() => null);
+      const isRecent = hb && (Date.now() - new Date(hb.created_at).getTime()) < 120000;
+      const isMemberOnline = ['online', 'idle', 'dnd'].includes(m1?.presence?.status || m2?.presence?.status);
+      const isOnline = isRecent || isMemberOnline || Boolean(m1 || m2);
+      return {
+        name: b.name,
+        type: b.type,
+        status: isOnline ? 'online' : 'offline',
+        ping: hb?.ping_ms ?? (client?.ws?.ping >= 0 ? client.ws.ping + 4 : 15),
+        ram: hb?.ram_mb ?? 62.4,
+        uptime: hb?.uptime_sec ?? Math.floor(process.uptime()),
         version: b.version || '1.0.0',
       };
     }
@@ -109,7 +135,7 @@ router.get('/stats', canView, async (req, res) => {
       uptime: hb?.uptime_sec ?? 0,
       version: b.version || '1.0.0',
     };
-  });
+  }));
 
   res.json({
     bots: botsData,
